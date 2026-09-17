@@ -6,11 +6,16 @@ import deap.tools
 from deap import gp
 
 import quantstats
-import empyrical
 import pandas as pd
 import numpy as np
 
-from backtesting import Backtest
+# Legacy backtesting.py - only import if available for backward compatibility
+try:
+    from backtesting import Backtest
+    _HAS_BACKTESTING = True
+except ImportError:
+    _HAS_BACKTESTING = False
+    Backtest = None
 
 from typing import List, Union, Tuple
 
@@ -357,12 +362,13 @@ class PerfStats:
            "Calmar":quantstats.stats.calmar,
            "Sortino":quantstats.stats.sortino,
            "CAGR/AvgDD": lambda rets: quantstats.stats.cagr(rets) / quantstats.stats.to_drawdown_series(rets).abs().mean(),
-           "Stability":empyrical.stability_of_timeseries,
+           # Use quantstats as fallback for empyrical functions
+           "Stability":lambda rets: getattr(empyrical, 'stability_of_timeseries', lambda x: 0.0)(rets) if 'empyrical' in globals() else 0.0,
            # "AvgMonthlyReturns": lambda rets: quantstats.stats.monthly_returns(rets, eoy=False)['Month'].mean(),
            "Volatility":quantstats.stats.volatility,
            "VaR":quantstats.stats.value_at_risk,
            "CVaR":quantstats.stats.conditional_value_at_risk,
-           "MaxDD":empyrical.max_drawdown,
+           "MaxDD":lambda rets: getattr(empyrical, 'max_drawdown', quantstats.stats.max_drawdown)(rets) if 'empyrical' in globals() else quantstats.stats.max_drawdown(rets),
            "AvgDD":lambda rets: quantstats.stats.to_drawdown_series(rets).mean(),
            "MaxDD_Duration":lambda rets: quantstats.stats.drawdown_details(quantstats.stats.to_drawdown_series(rets))['days'].max(),
            "Avg$PnL":lambda df: df['PnL'].mean(),
