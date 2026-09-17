@@ -1,5 +1,3 @@
-
-
 """
 class _Strategy:
     SeriesBool
@@ -8,6 +6,7 @@ class _Strategy:
 
 Or we can save all in a json file for the whole population.
 """
+
 
 class Orchestrator:
     """
@@ -68,6 +67,7 @@ class Orchestrator:
     Usage:
 
     """
+
     def __new__(cls, *args, **kwargs):
 
         # Register the primitives in CTraderTranslator.register_primitive
@@ -80,7 +80,8 @@ class Orchestrator:
 
 
 class Evolver:
-    """This is one solution to implement the Main Genetic-Programming Algorithm and integrates the Backtesting Engine and GP Engine.
+    (
+        """This is one solution to implement the Main Genetic-Programming Algorithm and integrates the Backtesting Engine and GP Engine.
 
     Parameters:
     df_dohlcv : pd.DataFrame (Required)
@@ -132,7 +133,8 @@ class Evolver:
 
     //input_gp is processed inside this class.
 
-    evolver.raw_str : Str = r""""""
+    evolver.raw_str : Str = r"""
+        """
         Contains the generated code. Initially, this is an empty raw string. When this is invoked using @property, it will process all the 
         generated 'code components' and 'sum' it up into one executable valid python deap code.
     evolver.exec_raw_str()
@@ -149,4 +151,6 @@ class Evolver:
     Notes:
     - The template string generators might get included here and create a specific utils module for deap gp template generators.
     """
+    )
+
     pass

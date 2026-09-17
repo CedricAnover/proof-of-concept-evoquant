@@ -26,6 +26,9 @@ dependencies = [
     
     # Performance optimization
     "numba>=0.59.0",
+
+    # Template engine for code generation
+    "jinja2>=3.1.0",
 ]
 
 [dependency-groups]

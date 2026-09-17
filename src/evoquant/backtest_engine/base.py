@@ -13,15 +13,14 @@ Follows SOLID principles, particularly:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+
 import pandas as pd
-import numpy as np
 
 
 @dataclass
 class BacktestConfig:
     """Configuration for backtesting runs.
-    
+
     Attributes:
         initial_cash: Starting capital for backtest
         commission: Commission rate (e.g., 0.001 for 0.1%)
@@ -34,22 +33,23 @@ class BacktestConfig:
         exit_after_n_bars: Maximum bars to hold position
         exit_encoded_entry: Whether signal end triggers exit
     """
+
     initial_cash: float = 100000.0
     commission: float = 0.0001
     slippage: float = 0.0
     margin: float = 1.0
     direction: str = "LongOnly"
-    trade_size: Union[float, int] = 0.99
-    stop_loss: Optional[Tuple[float, str]] = None
-    take_profit: Optional[Tuple[float, str]] = None
-    exit_after_n_bars: Optional[int] = None
+    trade_size: float | int = 0.99
+    stop_loss: tuple[float, str] | None = None
+    take_profit: tuple[float, str] | None = None
+    exit_after_n_bars: int | None = None
     exit_encoded_entry: bool = True
 
 
 @dataclass
 class Trade:
     """Represents a single trade.
-    
+
     Attributes:
         entry_time: Entry timestamp
         exit_time: Exit timestamp
@@ -62,6 +62,7 @@ class Trade:
         mae: Maximum adverse excursion
         mfe: Maximum favorable excursion
     """
+
     entry_time: pd.Timestamp
     exit_time: pd.Timestamp
     entry_price: float
@@ -77,7 +78,7 @@ class Trade:
 @dataclass
 class BacktestResult:
     """Standardized backtest result object.
-    
+
     Attributes:
         trades: List of Trade objects
         equity_curve: DataFrame with equity progression
@@ -86,27 +87,28 @@ class BacktestResult:
         config: BacktestConfig used for this run
         strategy_name: Name of the strategy tested
     """
-    trades: List[Trade] = field(default_factory=list)
-    equity_curve: Optional[pd.DataFrame] = None
-    returns: Optional[pd.Series] = None
-    metrics: Dict[str, float] = field(default_factory=dict)
-    config: Optional[BacktestConfig] = None
+
+    trades: list[Trade] = field(default_factory=list)
+    equity_curve: pd.DataFrame | None = None
+    returns: pd.Series | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
+    config: BacktestConfig | None = None
     strategy_name: str = ""
-    
+
     @property
     def is_empty(self) -> bool:
         """Check if result contains no trades."""
         return len(self.trades) == 0
-    
+
     @property
     def total_return(self) -> float:
         """Get total return from equity curve."""
         if self.equity_curve is None or self.equity_curve.empty:
             return 0.0
-        initial = self.equity_curve['Equity'].iloc[0]
-        final = self.equity_curve['Equity'].iloc[-1]
+        initial = self.equity_curve["Equity"].iloc[0]
+        final = self.equity_curve["Equity"].iloc[-1]
         return (final - initial) / initial if initial != 0 else 0.0
-    
+
     @property
     def n_trades(self) -> int:
         """Get number of trades."""
@@ -115,75 +117,74 @@ class BacktestResult:
 
 class BacktestEngineAdapter(ABC):
     """Abstract base class for all backtesting engines.
-    
+
     This defines the contract that any backtesting implementation must follow.
     Implementations can use NautilusTrader, backtesting.py, vectorbt, or any
     other backtesting framework.
-    
+
     Usage:
         class NautilusBacktestEngine(BacktestEngineAdapter):
             def __init__(self, config: BacktestConfig):
                 super().__init__(config)
                 # Initialize Nautilus-specific components
-            
+
             def run(self, signals: pd.Series, data: pd.DataFrame) -> BacktestResult:
                 # Implement NautilusTrader backtest logic
                 pass
     """
-    
-    def __init__(self, config: Optional[BacktestConfig] = None):
+
+    def __init__(self, config: BacktestConfig | None = None):
         """Initialize the backtest engine.
-        
+
         Args:
             config: Backtest configuration. If None, uses default config.
         """
         self._config = config or BacktestConfig()
-        self._last_result: Optional[BacktestResult] = None
-    
+        self._last_result: BacktestResult | None = None
+
     @property
     def config(self) -> BacktestConfig:
         """Get the current backtest configuration."""
         return self._config
-    
+
     @config.setter
     def config(self, value: BacktestConfig):
         """Set the backtest configuration."""
         self._config = value
-    
+
     @property
-    def last_result(self) -> Optional[BacktestResult]:
+    def last_result(self) -> BacktestResult | None:
         """Get the last backtest result."""
         return self._last_result
-    
+
     @abstractmethod
-    def run(self, signals: pd.Series, data: pd.DataFrame, 
-            strategy_name: str = "") -> BacktestResult:
+    def run(self, signals: pd.Series, data: pd.DataFrame, strategy_name: str = "") -> BacktestResult:
         """Run backtest with given signals and data.
-        
+
         Args:
             signals: Boolean series indicating entry/exit signals
             data: OHLCV DataFrame with columns [Open, High, Low, Close, Volume]
                   Index should be datetime
             strategy_name: Optional name for the strategy
-        
+
         Returns:
             BacktestResult containing trades, equity curve, and metrics
-        
+
         Raises:
             BacktestError: If backtest fails
         """
         pass
-    
+
     @abstractmethod
-    def get_metrics(self, result: BacktestResult) -> Dict[str, float]:
+    def get_metrics(self, result: BacktestResult) -> dict[str, float]:
         """Calculate performance metrics from backtest result.
-        
+
         Args:
             result: BacktestResult from a run
-        
+
         Returns:
             Dictionary of metric names to values
-        
+
         Note:
             Common metrics include:
             - Sharpe ratio
@@ -195,41 +196,41 @@ class BacktestEngineAdapter(ABC):
             - Profit factor
         """
         pass
-    
+
     def validate_data(self, data: pd.DataFrame) -> None:
         """Validate input data format.
-        
+
         Args:
             data: OHLCV DataFrame to validate
-        
+
         Raises:
             ValueError: If data is invalid
         """
-        required_columns = {'Open', 'High', 'Low', 'Close'}
+        required_columns = {"Open", "High", "Low", "Close"}
         if not required_columns.issubset(data.columns):
             raise ValueError(f"Data must contain columns: {required_columns}")
-        
+
         if not isinstance(data.index, pd.DatetimeIndex):
             raise ValueError("Data index must be DatetimeIndex")
-        
+
         if data.empty:
             raise ValueError("Data cannot be empty")
 
 
 class MetricsCalculator(ABC):
     """Abstract base class for metrics calculation.
-    
+
     Allows pluggable metrics calculation regardless of backtesting engine used.
     """
-    
+
     @abstractmethod
-    def calculate(self, returns: pd.Series, trades: List[Trade]) -> Dict[str, float]:
+    def calculate(self, returns: pd.Series, trades: list[Trade]) -> dict[str, float]:
         """Calculate performance metrics.
-        
+
         Args:
             returns: Series of period returns
             trades: List of Trade objects
-        
+
         Returns:
             Dictionary of metric names to values
         """
@@ -238,8 +239,8 @@ class MetricsCalculator(ABC):
 
 class BacktestError(Exception):
     """Exception raised when backtesting fails."""
-    
-    def __init__(self, message: str, cause: Optional[Exception] = None):
+
+    def __init__(self, message: str, cause: Exception | None = None):
         super().__init__(message)
         self.cause = cause
 
