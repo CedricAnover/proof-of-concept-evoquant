@@ -19,6 +19,22 @@ EvoQuant combines evolutionary computation with quantitative finance to discover
 
 ## Installation
 
+### Using uv (Recommended)
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone <repository-url>
+cd evoquant
+
+# Install dependencies and set up the project
+uv sync
+```
+
+### Using pip
+
 ```bash
 pip install evoquant
 ```
@@ -30,9 +46,9 @@ Core dependencies:
 - `pandas` - Data manipulation
 - `numpy` - Numerical computing
 - `pandas_ta` - Technical analysis indicators
-- `backtesting` - Backtesting engine
-- `nautilus_trader` - High-performance backtesting and trading engine
+- `nautilus_trader` - High-performance backtesting and trading engine (primary)
 - `jinja2` - Template engine for code generation
+- `backtesting` - Backtesting engine (legacy support)
 
 Optional dependencies:
 - `vectorbt` - Vectorized backtesting (legacy support)
@@ -50,10 +66,12 @@ evoquant/
 ├── signals.py             # Signal generation rules and logic operators
 ├── orchestrator.py        # Main orchestration classes (Orchestrator, Evolver)
 ├── translator_engine/     # Code translation engines
-│   ├── base.py
-│   └── ctrader_template.cs
+│   ├── base.py           # Translator base classes and implementations
+│   ├── jinja_template.py # Jinja2 template engine
+│   └── ctrader_template.j2 # cTrader C# template (Jinja2)
 ├── backtest_engine/       # Backtesting components
 │   ├── evo_bt.py         # Evolution strategy backtester
+│   ├── nautilus_adapter.py # NautilusTrader adapter (primary)
 │   ├── utils.py          # Backtesting utilities
 │   └── validation.py     # Validation logic
 └── tests/                # Test suite
@@ -210,14 +228,26 @@ def custom_signal_rule(ser1: SeriesFloat, ser2: SeriesFloat) -> SeriesBool:
 
 ### Code Translation
 
-EvoQuant can translate evolved strategies to different trading platform languages:
+EvoQuant can translate evolved strategies to different trading platform languages using Jinja2 templates:
 
 ```python
-from translator_engine.base import CTraderTranslator
+from translator_engine.jinja_template import CTraderJinjaTranslator
 
-translator = CTraderTranslator()
+# Initialize the translator
+translator = CTraderJinjaTranslator()
+
+# Translate an evolved strategy tree to cTrader C# code
 csharp_code = translator.translate(evolved_strategy_tree)
+
+# Save the generated code to a file
+translator.save_to_file(evolved_strategy_tree, 'output_strategy.cs')
 ```
+
+The translation engine supports:
+- **Jinja2 Templates**: Flexible template system with custom filters
+- **Conditional Logic**: Handle None values and optional parameters
+- **Type Conversion**: Automatic conversion of Python types to C# syntax
+- **Code Formatting**: Proper indentation and structure preservation
 
 ## Architecture
 
@@ -252,24 +282,64 @@ The GP engine evolves strategies as expression trees:
 
 ### Backtesting Engine
 
-Built on top of `backtesting.py` and `vectorbt`:
+Built on top of `NautilusTrader` (primary) with legacy support for `backtesting.py` and `vectorbt`:
 
 - **Event-driven**: Simulates realistic order execution
-- **Vectorized**: Fast portfolio-level calculations
-- **Flexible**: Support for various order types and exit conditions
-- **Comprehensive**: Detailed trade statistics and equity curves
+- **High-performance**: Optimized for speed with NautilusTrader
+- **Flexible**: Support for various order types, commission models, and exit conditions
+- **Comprehensive**: Detailed trade statistics, equity curves, and drawdown analysis
+- **Extensible**: Adapter pattern allows easy integration of alternative backtesting engines
+
+```python
+from backtest_engine.nautilus_adapter import NautilusBacktestEngine, NautilusMetricsCalculator
+
+# Initialize the backtest engine
+engine = NautilusBacktestEngine(
+    cash=100_000,
+    direction="LongOnly",  # or "ShortOnly", "LongShort"
+    commission_rate=0.001,
+    slippage_rate=0.001
+)
+
+# Run backtest
+results = engine.run(data, signals)
+
+# Calculate performance metrics
+metrics = NautilusMetricsCalculator()
+sharpe = metrics.calculate_sharpe(results.equity_curve)
+drawdown = metrics.calculate_max_drawdown(results.equity_curve)
+```
 
 ## Testing
 
-Run the test suite:
+### Running Tests
+
+Run the test suite using pytest:
 
 ```bash
-cd tests
-python -m pytest
+# Using uv (recommended)
+uv run pytest tests/ -v
+
+# Or directly with pytest
+pytest tests/ -v
 ```
 
-Available tests:
-- `test_backtesting.py` - Backtesting engine tests
+### CI/CD Pipeline
+
+EvoQuant uses GitHub Actions for continuous integration and deployment. The CI pipeline automatically runs on every push and pull request:
+
+- **Linting**: Code style checks with Ruff
+- **Type Checking**: Static type analysis with mypy
+- **Testing**: Run all unit and integration tests
+- **Coverage**: Generate code coverage reports
+
+The workflow is defined in `.github/workflows/ci-cd.yml` and supports Python 3.10, 3.11, and 3.12.
+
+### Available Tests
+
+- `test_jinja_template.py` - Jinja2 template engine tests
+- `test_nautilus_adapter.py` - NautilusTrader backtesting adapter tests
+- `test_backtesting.py` - Legacy backtesting engine tests
 - `test_indicators.py` - Indicator calculations
 - `test_signals.py` - Signal generation
 - `test_base.py` - Base class functionality
@@ -282,6 +352,42 @@ See the `tests/Example Generated Strategy/` directory for example evolved strate
 ## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+
+### Development Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd evoquant
+   ```
+
+2. **Install dependencies with uv**:
+   ```bash
+   uv sync --dev
+   ```
+
+3. **Run tests**:
+   ```bash
+   uv run pytest tests/ -v
+   ```
+
+4. **Format code**:
+   ```bash
+   uv run ruff format .
+   uv run ruff check . --fix
+   ```
+
+5. **Type checking**:
+   ```bash
+   uv run mypy src/evoquant
+   ```
+
+### Code Quality Standards
+
+- Follow PEP 8 style guidelines
+- Write unit tests for new features
+- Maintain type hints for all public APIs
+- Ensure CI/CD pipeline passes before submitting PRs
 
 ## Citation
 
