@@ -1,9 +1,6 @@
-from evoquant import base, signals, indicators, evo_gp
-
-from string import Template
-import textwrap
-
 import inspect
+
+from evoquant import base, evo_gp, indicators, signals
 
 base_module_str = rf"{inspect.getsource(base)}"
 signals_module_str = rf"{inspect.getsource(signals)}"
@@ -18,8 +15,7 @@ exec(utils_module_str)
 # print(module_content_str)
 # # exec(module_content_str)
 
-test_str1 = \
-r"""
+test_str1 = r"""
 # This should be a valid python code to be executed.
 
 max_lag = {param_max_lag}
@@ -29,8 +25,7 @@ print("Max Lag will become a global within this module.")
 {some_code}
 """
 
-test_str2 = \
-r"""
+test_str2 = r"""
 print("\n")
 # This is some code to be appended to test_str1
 def some_func1():
@@ -54,9 +49,6 @@ some_func2({param_non_str_var}=(1+1.))
 #                              )
 
 # This will be useful for creating several lines of Code in a target language. [Value|Expression|Variable|Function|Class|Code]
-test_str1 = test_str1.format(param_max_lag=5,
-                             some_code=test_str2.format(param_word='WORD', param_non_str_var='x')
-                             )
+test_str1 = test_str1.format(param_max_lag=5, some_code=test_str2.format(param_word="WORD", param_non_str_var="x"))
 exec(test_str1)
 print(test_str1)
-

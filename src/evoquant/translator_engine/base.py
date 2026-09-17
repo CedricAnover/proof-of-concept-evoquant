@@ -1,19 +1,19 @@
-import typing
+
+import copy
+from collections import OrderedDict
+from string import Template
 
 from deap import gp
+
 # from evoquant.base import SeriesBool, ParameterBase
-from evoquant import SeriesBool, ParameterBase
+from evoquant import ParameterBase, SeriesBool
 
-from functools import partial
-from string import Template
-import re
-import copy
 
-from typing import List, Union
-from collections import OrderedDict
+def _save_result_to_pickle(directory, file_extension="txt"):
+    import datetime
+    import os
+    import uuid
 
-def _save_result_to_pickle(directory, file_extension='txt'):
-    import os, datetime, uuid
     def decorator_func(func):
         def wrapper_func(*args, **kwargs):
             result = func(*args, **kwargs)
@@ -24,15 +24,18 @@ def _save_result_to_pickle(directory, file_extension='txt'):
             # Generate a unique filename based on timestamp and UUID
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
-            filename = os.path.join(directory, fr"""strategy_{timestamp}_{unique_id}.{file_extension}""")
+            filename = os.path.join(directory, rf"""strategy_{timestamp}_{unique_id}.{file_extension}""")
 
             # Save the result as a pickle file
             with open(filename, "w") as file:
                 file.write(result)
 
             return result
+
         return wrapper_func
+
     return decorator_func
+
 
 class PTTranslator(gp.PrimitiveTree):
     """This Class extracts the necessary information of a PrimitiveTree that represents the trading strategy.
@@ -74,13 +77,25 @@ class PTTranslator(gp.PrimitiveTree):
 
         # self.composite_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([type(arg) == SeriesBool for arg in self[idx].args])]  # Defined by Types of Args
         # self.simple_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([type(arg) != SeriesBool for arg in self[idx].args])] # Defined by Types of Args
-        self.composite_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([arg_type == SeriesBool for arg_type in self[idx].args])]  # Defined by Types of Args
-        self.simple_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([arg_type != SeriesBool for arg_type in self[idx].args])]  # Defined by Types of Args
+        self.composite_signal_primitive_ls = [
+            idx for idx in self.signal_primitive_ls if all([arg_type == SeriesBool for arg_type in self[idx].args])
+        ]  # Defined by Types of Args
+        self.simple_signal_primitive_ls = [
+            idx for idx in self.signal_primitive_ls if all([arg_type != SeriesBool for arg_type in self[idx].args])
+        ]  # Defined by Types of Args
 
-        self.composite_indicator_primitive_ls = [idx for idx in self.indicator_primitive_ls if gp.PrimitiveTree(self[self.searchSubtree(idx)]).height > 1]
-        self.simple_indicator_primitive_ls = [idx for idx in self.indicator_primitive_ls if gp.PrimitiveTree(self[self.searchSubtree(idx)]).height == 1]
-        assert set(self.simple_signal_primitive_ls + self.composite_signal_primitive_ls + self.simple_indicator_primitive_ls + self.composite_indicator_primitive_ls) == \
-               set(self.primitive_ls)
+        self.composite_indicator_primitive_ls = [
+            idx for idx in self.indicator_primitive_ls if gp.PrimitiveTree(self[self.searchSubtree(idx)]).height > 1
+        ]
+        self.simple_indicator_primitive_ls = [
+            idx for idx in self.indicator_primitive_ls if gp.PrimitiveTree(self[self.searchSubtree(idx)]).height == 1
+        ]
+        assert set(
+            self.simple_signal_primitive_ls
+            + self.composite_signal_primitive_ls
+            + self.simple_indicator_primitive_ls
+            + self.composite_indicator_primitive_ls
+        ) == set(self.primitive_ls)
 
         # self.non_primitive_ls = [self.index(elem) for elem in self if not isinstance(elem, gp.Primitive)]
         self.non_primitive_ls = []
@@ -91,30 +106,39 @@ class PTTranslator(gp.PrimitiveTree):
 
     def primitive_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.non_primitive_ls]
+
     def signal_primitive_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.signal_primitive_ls]
+
     def indicator_primitive_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.indicator_primitive_ls]
+
     def composite_signal_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.composite_signal_primitive_ls]
+
     def simple_signal_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.simple_signal_primitive_ls]
+
     def composite_indicator_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.composite_indicator_primitive_ls]
+
     def simple_indicator_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.simple_indicator_primitive_ls]
+
     def non_primitive_list(self):
         return [str(gp.PrimitiveTree(self[self.searchSubtree(idx)])) for idx in self.non_primitive_ls]
 
     # (Deprecated)
-    def format_idx(self, in_idx:int, *args) -> Union[None, str]:
+    def format_idx(self, in_idx: int, *args) -> None | str:
         # This method is only for Primitives. Terminals will be formatted in another class. Or directly using .value property or .value_mapper(trade_platform) method.
         if isinstance(self[in_idx], gp.Terminal):  # If the node of in_idx is a Terminal, return None
             return
         assert self[in_idx].arity == len(args), "Positional Arguments must be equal to the Arity of the Primitive"
-        return self[in_idx].format(*(f"{arg}" for arg in args)) # Very important as we can use this to replace the input argument value format
+        return self[in_idx].format(
+            *(f"{arg}" for arg in args)
+        )  # Very important as we can use this to replace the input argument value format
 
-    def get_idx_args(self, in_idx:int) -> Union[List[int], None, int]:
+    def get_idx_args(self, in_idx: int) -> list[int] | None | int:
         """Returns a list of indexes that are argument to the given index in_idx.
         This is equivalent to returning the children (not grandchildren of Primitives) of a node.
         This would return an empty list if the given index is the index of a Terminal. Because all Terminals have no children.
@@ -132,15 +156,16 @@ class PTTranslator(gp.PrimitiveTree):
         out_lst = [lst[0] for lst in self._remove_sublists(sub_sub_trees)]  # Extract the roots
         return out_lst
 
-    def get_idx_parent(self, in_idx:int) -> Union[int, None]:
-        """Returns the index of the Parent node. This method will return None if the given index is the Root node.
-        """
+    def get_idx_parent(self, in_idx: int) -> int | None:
+        """Returns the index of the Parent node. This method will return None if the given index is the Root node."""
         assert in_idx < self.length
-        if in_idx == 0: # in_idx is the Root (i.e. No Parent)
+        if in_idx == 0:  # in_idx is the Root (i.e. No Parent)
             return
 
         # root_sublists = self.get_idx_subtrees(0) # Get all the Tree Sublists of the root.
-        parent_children = {i:self.get_idx_args(i) for i in range(self.length)} # Dict(Int -> Union[List[int], List[None]])
+        parent_children = {
+            i: self.get_idx_args(i) for i in range(self.length)
+        }  # Dict(Int -> Union[List[int], List[None]])
 
         for parent, children in parent_children.items():
             if in_idx in children:
@@ -148,7 +173,7 @@ class PTTranslator(gp.PrimitiveTree):
                 assert isinstance(out_parent, int)
                 return out_parent
 
-    def get_idx_child_grandchild(self, in_idx:int, exclude_root:bool=True) -> Union[List[int], List[None]]:
+    def get_idx_child_grandchild(self, in_idx: int, exclude_root: bool = True) -> list[int] | list[None]:
         """Returns the List of Indexes of the Children & Grandchildren of given Node Index.
         This would return an empty list if the given node index is a Terminal node in a PrimitiveTree.
         It is optional to include the Parent/Grandparent in the List. By default, it's excluded.
@@ -159,8 +184,8 @@ class PTTranslator(gp.PrimitiveTree):
         subtree = gp.PrimitiveTree(self[self.searchSubtree(in_idx)])
         subtree_len = len(subtree)
 
-        slice_start = self.searchSubtree(in_idx).start # Root
-        slice_stop = self.searchSubtree(in_idx).stop # Last Element
+        slice_start = self.searchSubtree(in_idx).start  # Root
+        slice_stop = self.searchSubtree(in_idx).stop  # Last Element
         child_grandchild_idxs = [i for i in range(slice_start + 1, slice_stop)]  # Excluding the Start of the Slice.
         # child_grandchild_idxs = [self.index(subtree[i]) for i in range(1, subtree_len)]
         # child_grandchild_idxs = []
@@ -170,11 +195,11 @@ class PTTranslator(gp.PrimitiveTree):
 
         if exclude_root:
             return child_grandchild_idxs
-        else: # If we want the subtree root parent to be included in the start of the list.
+        else:  # If we want the subtree root parent to be included in the start of the list.
             # return [in_idx] + child_grandchild_idxs
             return [slice_start] + child_grandchild_idxs
 
-    def get_idx_subtrees(self, in_idx: int) -> Union[List[List[int]], List[None]]:
+    def get_idx_subtrees(self, in_idx: int) -> list[list[int]] | list[None]:
         """Returns the List of Subtrees (i.e. List of Indexes) of a given Node Index.
         This method returns an empty list if the given Node Index is a Terminal Node in a PrimitiveTree.
         """
@@ -188,14 +213,16 @@ class PTTranslator(gp.PrimitiveTree):
         sub_sub_trees = []
         # Loop through the slice.
         # Has to be left-exclusive because we dont want to include the subtree itself as a subtree.
-        for i in range(slice_start+1, slice_stop): # Left-Exclusive & Right-inclusive? i.e. exlude the root of index in_idx as a subtree of the main tree
+        for i in range(
+            slice_start + 1, slice_stop
+        ):  # Left-Exclusive & Right-inclusive? i.e. exlude the root of index in_idx as a subtree of the main tree
             # Check if index i is a Terminal in main tree
             if isinstance(self[i], gp.Terminal):
                 sub_sub_trees.append([i])
             else:
                 sub_slice_start = self.searchSubtree(i).start
                 sub_slice_stop = self.searchSubtree(i).stop
-                temp_ls = list(range(sub_slice_start, sub_slice_stop)) # This one has to be left-inclusive
+                temp_ls = list(range(sub_slice_start, sub_slice_stop))  # This one has to be left-inclusive
                 sub_sub_trees.append(temp_ls)
 
         return sub_sub_trees
@@ -230,36 +257,36 @@ class PTTranslator(gp.PrimitiveTree):
             return False
         # Check if sublist_a is a sublist of sublist_b by comparing elements
         for i in range(len_b - len_a + 1):
-            if sublist_b[i:i + len_a] == sublist_a:
+            if sublist_b[i : i + len_a] == sublist_a:
                 return True
         return False
 
 
 class CTraderTranslator:
     """
-        Example: Registering Primitive cTrader Expression Templates and Storing Strategy Configurations
-        Resgister all the templates of primitives in DEAP and how they should be mapped to the target language (e.g. cTrader C#)
-        Make sure to do this before making any instances of CTraderTranslator for a PrimitiveTree Instance
+    Example: Registering Primitive cTrader Expression Templates and Storing Strategy Configurations
+    Resgister all the templates of primitives in DEAP and how they should be mapped to the target language (e.g. cTrader C#)
+    Make sure to do this before making any instances of CTraderTranslator for a PrimitiveTree Instance
 
-        e.g. CTraderTranslator.register_primitive("shift", r"Indicators.GetIndicator<Shift>({0}, {1}).Result") # (<Series>, <Lag>)
+    e.g. CTraderTranslator.register_primitive("shift", r"Indicators.GetIndicator<Shift>({0}, {1}).Result") # (<Series>, <Lag>)
 
-        Make sure to store the Strategy Configurations and Settings in the CTraderTranslator class before making any instances
+    Make sure to store the Strategy Configurations and Settings in the CTraderTranslator class before making any instances
 
-        e.g. CTraderTranslator.store_strat_config(<Strategy Parameter Dictionary>)
+    e.g. CTraderTranslator.store_strat_config(<Strategy Parameter Dictionary>)
 
-        The above has to be set in the main evolution program in order to store the whole settings in memory before running the evolutionary algorithm.
+    The above has to be set in the main evolution program in order to store the whole settings in memory before running the evolutionary algorithm.
 
-        Example: Instantiating and Translating (for a PrimitiveTree instance).
-        ptt = PTTranslator(<Some Strategy PrimitiveTree Instance>)
-        ct_translator = CTraderTranslator(ptt)
-        ct_translator.run_translation()
+    Example: Instantiating and Translating (for a PrimitiveTree instance).
+    ptt = PTTranslator(<Some Strategy PrimitiveTree Instance>)
+    ct_translator = CTraderTranslator(ptt)
+    ct_translator.run_translation()
 
-        Example: Generating a Valid Full Code for cTrader C#
-        ct_translator.get_complete_code(filename="bot_code.txt", directory=r"<Directory>")
-        """
+    Example: Generating a Valid Full Code for cTrader C#
+    ct_translator.get_complete_code(filename="bot_code.txt", directory=r"<Directory>")
+    """
+
     # The complete list of expected parameters (keyword args) for cTrader Complete Code. All the kwargs will be enclosed in $ or ${param_name} in string.Template
-    _EVO_STRAT_PARAMS = \
-    [
+    _EVO_STRAT_PARAMS = [
         "strategy_name",
         "direction",
         "trade_size",
@@ -271,7 +298,7 @@ class CTraderTranslator:
         "exit_when_pnl_lessthan",
         "stop_loss",
         "take_profit",
-        "enable_tsl"
+        "enable_tsl",
     ]
 
     _strat_config: dict = dict()  # Strategy Configuration/Settings/Parameters of EvoStrategy(SignalStrategy) class. Needs to be modified in-memory before creating any instances.
@@ -281,9 +308,9 @@ class CTraderTranslator:
 
     _primitive_to_ctrader: dict = {}  # Maps the DEAP Name of the Primitives to Valid 'Expressions' in cTrader. Dict(Str -> Callable)
 
-    def __init__(self, ptt:PTTranslator):
-        #-- All the Properties here are Getting Modified by a ptt instance. The only propery that should not be mutable is  _primitive_to_ctrader & _trade_platform
-        self.ptt = ptt # PTTranslator instance.
+    def __init__(self, ptt: PTTranslator):
+        # -- All the Properties here are Getting Modified by a ptt instance. The only propery that should not be mutable is  _primitive_to_ctrader & _trade_platform
+        self.ptt = ptt  # PTTranslator instance.
 
         self._indicator_signal_code = ""  # Code Block for Valid cTrader Indicators and Signals. Stored in a Variable.
 
@@ -294,39 +321,48 @@ class CTraderTranslator:
         self._idx_simple_signals: dict = {}  # Maps Simple Signal Primitives index to valid syntax in CTRADER
         self._idx_composite_signals: dict = {}  # Maps Composite Signal Primitives index to valid syntax in CTRADER
 
-        self._root_signal:str = ""  # The Final Valid CTRADER Syntax for Root Signal
+        self._root_signal: str = ""  # The Final Valid CTRADER Syntax for Root Signal
 
         # Run the run_translation & generate_indicator_signal_code methods
         self.run_translation()
         self.generate_indicator_signal_code()
 
     @classmethod
-    def translate_terminal(cls, obj:gp.Terminal): # DEAP -> CTRADER
+    def translate_terminal(cls, obj: gp.Terminal):  # DEAP -> CTRADER
         """Return a Valid cTrader # Syntax for  Non-Primitive or Terminal Object from DEAP"""
         assert isinstance(obj, gp.Terminal), "The input must be a gp.Terminal object"
 
-        def _contains_word_ignore_case(string, word): return word.lower() in string.lower()
+        def _contains_word_ignore_case(string, word):
+            return word.lower() in string.lower()
 
-        _value = obj.value # Extract the value of the gp.Terminal object (Not a ParameterBase!!!)
+        _value = obj.value  # Extract the value of the gp.Terminal object (Not a ParameterBase!!!)
 
-        if isinstance(_value, str): # This could be a SeriesFloat/SeriesPrice/SeriesOpen/.../SeriesVolume/SeriesDate
+        if isinstance(_value, str):  # This could be a SeriesFloat/SeriesPrice/SeriesOpen/.../SeriesVolume/SeriesDate
             # Make sure to Clean
-            if _contains_word_ignore_case(_value, "date"): return r"Date"
-            if _contains_word_ignore_case(_value, "open"): return r"Open"
-            if _contains_word_ignore_case(_value, "high"): return r"High"
-            if _contains_word_ignore_case(_value, "low"): return r"Low"
-            if _contains_word_ignore_case(_value, "close"): return r"Close"
-            if _contains_word_ignore_case(_value, "volume"): return r"Volume"
+            if _contains_word_ignore_case(_value, "date"):
+                return r"Date"
+            if _contains_word_ignore_case(_value, "open"):
+                return r"Open"
+            if _contains_word_ignore_case(_value, "high"):
+                return r"High"
+            if _contains_word_ignore_case(_value, "low"):
+                return r"Low"
+            if _contains_word_ignore_case(_value, "close"):
+                return r"Close"
+            if _contains_word_ignore_case(_value, "volume"):
+                return r"Volume"
         else:
             assert issubclass(type(_value), ParameterBase), "The input object's value type must be a ParameterBase"
             if isinstance(_value.value, (int, float)):
-                return _value.value_mapper(cls._trade_platform) # Sometimes an Int is mapped to a string such as DayOfWeek
-            else: # Very likely to be a string. Must be matched with a valid object in C# cTrader (Enums or Interfaces)
+                return _value.value_mapper(
+                    cls._trade_platform
+                )  # Sometimes an Int is mapped to a string such as DayOfWeek
+            else:  # Very likely to be a string. Must be matched with a valid object in C# cTrader (Enums or Interfaces)
                 assert isinstance(_value.value, str), "The value is neither a string nor numeric!"
                 return _value.value_mapper(cls._trade_platform)
 
     @property
-    def primitive_to_ctrader(self) -> callable: # DEAP -> CTRADER
+    def primitive_to_ctrader(self) -> callable:  # DEAP -> CTRADER
         return self._primitive_to_ctrader
 
     @property
@@ -342,7 +378,7 @@ class CTraderTranslator:
         return self._indicator_signal_code
 
     @classmethod
-    def register_primitive(cls, name:str, template:str):
+    def register_primitive(cls, name: str, template: str):
         """
         Example Usage:
         translator = CTraderTranslator(...)
@@ -354,7 +390,7 @@ class CTraderTranslator:
 
     # TODO (In-Progress) Implement a class method for checking, cleaning, and storing strategy params/config/settings for full code.
     @classmethod
-    def store_strat_config(cls, strat_params:dict):
+    def store_strat_config(cls, strat_params: dict):
         """
         strat_params : Dict
             This dictionary should contain all the parameters for EvoStrategy(SignalStrategy) class.
@@ -369,46 +405,56 @@ class CTraderTranslator:
         a valid ctrader parameters.
         """
         # Goal: Modify the cls._strat_config dictionary plus some other required parameters outside EvoStrategy
-        assert len(strat_params.keys()) == len(cls._EVO_STRAT_PARAMS), "The given strategy parameter dictionary does not match the size of _EVO_STRAT_PARAMS"
-        assert all([(k in cls._EVO_STRAT_PARAMS) for k in strat_params.keys()]), "There is some element in the Strategy Params that does not match the keys in _EVO_STRAT_PARAMS"
+        assert len(strat_params.keys()) == len(cls._EVO_STRAT_PARAMS), (
+            "The given strategy parameter dictionary does not match the size of _EVO_STRAT_PARAMS"
+        )
+        assert all([(k in cls._EVO_STRAT_PARAMS) for k in strat_params]), (
+            "There is some element in the Strategy Params that does not match the keys in _EVO_STRAT_PARAMS"
+        )
 
         for k in cls._EVO_STRAT_PARAMS:
             if k == "strategy_name":
-                cls._strat_config[k] = r'"{0}"'.format(strat_params[k])
+                cls._strat_config[k] = rf'"{strat_params[k]}"'
             if k == "direction":
                 if strat_params[k] == "LongOnly":
-                    cls._strat_config[k] = r'TradeDirection.LongOnly'
+                    cls._strat_config[k] = r"TradeDirection.LongOnly"
                 if strat_params[k] == "ShortOnly":
-                    cls._strat_config[k] = r'TradeDirection.ShortOnly'
+                    cls._strat_config[k] = r"TradeDirection.ShortOnly"
                 if strat_params[k] == "LongShort":
-                    cls._strat_config[k] = r'TradeDirection.LongShort'
+                    cls._strat_config[k] = r"TradeDirection.LongShort"
             if k == "trade_size":
                 if isinstance(strat_params[k], int) and strat_params[k] >= 1:
                     # Check if its at least the minimum volume amount in ctrader.
-                    cls._strat_config[k] = r"{0}".format(strat_params[k])
+                    cls._strat_config[k] = rf"{strat_params[k]}"
                 elif isinstance(strat_params[k], float) and strat_params[k] > 0 and strat_params[k] < 1:
                     # Warn: in cTrader this will be dynamic depending on the state of the Account's Equity and Margin.
-                    cls._strat_config[k] = r"{0}".format(strat_params[k])
+                    cls._strat_config[k] = rf"{strat_params[k]}"
                 else:
-                    print("The trade size must be a valid numeric - Volume in Units or Fraction of Equity. Defaulting to 99% of Equity")
-                    cls._strat_config[k] = r"{0}".format(0.99) # Use Default 99% of Balance
+                    print(
+                        "The trade size must be a valid numeric - Volume in Units or Fraction of Equity. Defaulting to 99% of Equity"
+                    )
+                    cls._strat_config[k] = rf"{0.99}"  # Use Default 99% of Balance
             if k == "exit_encoded_entry":
-                if strat_params[k]: # if True
+                if strat_params[k]:  # if True
                     cls._strat_config[k] = r"true"
-                else: # if False
+                else:  # if False
                     cls._strat_config[k] = r"false"
             if k == "exit_after_n_bars":
                 if strat_params[k] is None:
                     cls._strat_config[k] = r"null"
                 else:
-                    assert isinstance(strat_params[k], int) and strat_params[k] >= 1, "exit_after_n_bars must be a valid positive integer"
-                    cls._strat_config[k] = r"{}".format(strat_params[k])
+                    assert isinstance(strat_params[k], int) and strat_params[k] >= 1, (
+                        "exit_after_n_bars must be a valid positive integer"
+                    )
+                    cls._strat_config[k] = rf"{strat_params[k]}"
             if k == "exit_after_n_days":
                 if strat_params[k] is None:
                     cls._strat_config[k] = r"null"
                 else:
-                    assert isinstance(strat_params[k], int) and strat_params[k] >= 1, "exit_after_n_days must be a valid positive integer"
-                    cls._strat_config[k] = r"{}".format(strat_params[k])
+                    assert isinstance(strat_params[k], int) and strat_params[k] >= 1, (
+                        "exit_after_n_days must be a valid positive integer"
+                    )
+                    cls._strat_config[k] = rf"{strat_params[k]}"
             # TODO: Implement mapping for exit_end_of_week
             if k == "exit_end_of_week":
                 if strat_params[k]:
@@ -425,17 +471,21 @@ class CTraderTranslator:
                 if strat_params[k] is None:
                     cls._strat_config[k] = r"null"
                 else:
-                    assert isinstance(strat_params[k], (float, int)) and strat_params[k] < 0, "exit_when_pnl_lessthan must be a valid negative number"
-                    cls._strat_config[k] = r"{}".format(strat_params[k])
+                    assert isinstance(strat_params[k], (float, int)) and strat_params[k] < 0, (
+                        "exit_when_pnl_lessthan must be a valid negative number"
+                    )
+                    cls._strat_config[k] = rf"{strat_params[k]}"
             if k == "stop_loss":
                 if len(strat_params[k]) == 0:
                     cls._strat_config[k] = r"null"
                 elif strat_params[k][1] == "Percent":
                     # Convert to valid decimal
-                    cls._strat_config[k] = r"({0}*Open.LastValue)/Symbol.PipSize".format(strat_params[k][0]/100)
+                    cls._strat_config[k] = rf"({strat_params[k][0] / 100}*Open.LastValue)/Symbol.PipSize"
                 elif strat_params[k][1] == "Pip":
-                    assert strat_params[k][0] > 0, "Pips represents a price range, this cannot be negative in evoquant context"
-                    cls._strat_config[k] = r"{0}".format(strat_params[k][0]) # Already in Valid Pips
+                    assert strat_params[k][0] > 0, (
+                        "Pips represents a price range, this cannot be negative in evoquant context"
+                    )
+                    cls._strat_config[k] = rf"{strat_params[k][0]}"  # Already in Valid Pips
                 elif strat_params[k][1] == "Point":
                     # TODO: Implement mapping for Fixed Stop-Loss 'Point'
                     raise
@@ -446,10 +496,12 @@ class CTraderTranslator:
                     cls._strat_config[k] = r"null"
                 elif strat_params[k][1] == "Percent":
                     # Convert to valid decimal
-                    cls._strat_config[k] = r"({0}*Open.LastValue)/Symbol.PipSize".format(strat_params[k][0] / 100)
+                    cls._strat_config[k] = rf"({strat_params[k][0] / 100}*Open.LastValue)/Symbol.PipSize"
                 elif strat_params[k][1] == "Pip":
-                    assert strat_params[k][0] > 0, "Pips represents a price range, this cannot be negative in evoquant context"
-                    cls._strat_config[k] = r"{0}".format(strat_params[k][0])
+                    assert strat_params[k][0] > 0, (
+                        "Pips represents a price range, this cannot be negative in evoquant context"
+                    )
+                    cls._strat_config[k] = rf"{strat_params[k][0]}"
                 elif strat_params[k][1] == "Point":
                     # TODO: Implement mapping for Fixed Take-Profit 'Point'
                     raise
@@ -462,13 +514,12 @@ class CTraderTranslator:
                     cls._strat_config[k] = r"false"
 
     def run_translation(self):
-        """This method will process and translate the deap string results to a valid ctrader syntax
-        """
+        """This method will process and translate the deap string results to a valid ctrader syntax"""
         # Process the Terminals. Cannot be an empty list.
         assert len(self.ptt.non_primitive_ls) != 0, "List of Terminals Cannot be Empty!"
         for idx in self.ptt.non_primitive_ls:
             self._idx_terminals[idx] = self.translate_terminal(self.ptt[idx])
-            self._idx_ctrader[idx] = self._idx_terminals[idx] # All Indexes to CTRADER
+            self._idx_ctrader[idx] = self._idx_terminals[idx]  # All Indexes to CTRADER
 
         # print(f"Done Processing Terminals!")
         # print("idx_ctrader: ", self._idx_ctrader)
@@ -479,13 +530,15 @@ class CTraderTranslator:
         # Process the Simple Indicators
         if len(self.ptt.simple_indicator_primitive_ls) != 0:
             for idx in self.ptt.simple_indicator_primitive_ls:
-                args_idxs = self.ptt.get_idx_args(idx) # List[int] and cannot be empty. Assumed to be Terminals
+                args_idxs = self.ptt.get_idx_args(idx)  # List[int] and cannot be empty. Assumed to be Terminals
                 assert len(args_idxs) > 0, "List of Arguments for Primitives cannot be Empty!"
-                assert all([isinstance(self.ptt[i], gp.Terminal) for i in args_idxs]), "Arguments for a Simple Indicator must be Terminals!"
-                prim_name = self.ptt[idx].name # Get the Deap name of the primitive
+                assert all([isinstance(self.ptt[i], gp.Terminal) for i in args_idxs]), (
+                    "Arguments for a Simple Indicator must be Terminals!"
+                )
+                prim_name = self.ptt[idx].name  # Get the Deap name of the primitive
                 temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
                 self._idx_simple_indicators[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
-                self._idx_ctrader[idx] = self._idx_simple_indicators[idx] # All Indexes to CTRADER
+                self._idx_ctrader[idx] = self._idx_simple_indicators[idx]  # All Indexes to CTRADER
 
         # print(f"Done Processing Simple Indicators!")
         # print("idx_ctrader: ", self._idx_ctrader)
@@ -497,23 +550,32 @@ class CTraderTranslator:
         # Note: Some composite indicators are composed of other composite indicators and simple indicator
         if len(self.ptt.composite_indicator_primitive_ls) != 0:
             # We need to modify and translate composite indicators with the least length first before the longest length.
-            temp_ls = [self.ptt.get_idx_child_grandchild(i, exclude_root=False) for i in self.ptt.composite_indicator_primitive_ls] # List[List[int]]
-            temp_ls = sorted(temp_ls, key=len, reverse=False) # Sort a List of List of composite indicators (indexes) from Shortest to Longest Length
-            temp_dict = {ls[0]:ls[1:] for ls in temp_ls}
+            temp_ls = [
+                self.ptt.get_idx_child_grandchild(i, exclude_root=False)
+                for i in self.ptt.composite_indicator_primitive_ls
+            ]  # List[List[int]]
+            temp_ls = sorted(
+                temp_ls, key=len, reverse=False
+            )  # Sort a List of List of composite indicators (indexes) from Shortest to Longest Length
+            temp_dict = {ls[0]: ls[1:] for ls in temp_ls}
             for idx, child_grandchild in temp_dict.items():
-                assert idx not in self._idx_composite_indicators.keys(), "This cant happen as we are starting the loop from least length composite indicator"
-                assert all([i in self._idx_ctrader.keys() for i in child_grandchild]), f"Some child or grandchild of Composite Indicator {idx} is not processed"
-                    # continue # This cant happen as we are starting from the Composite Indicator with least length
-                args_idxs = self.ptt.get_idx_args(idx) # List of Children (Argument)
+                assert idx not in self._idx_composite_indicators.keys(), (
+                    "This cant happen as we are starting the loop from least length composite indicator"
+                )
+                assert all([i in self._idx_ctrader.keys() for i in child_grandchild]), (
+                    f"Some child or grandchild of Composite Indicator {idx} is not processed"
+                )
+                # continue # This cant happen as we are starting from the Composite Indicator with least length
+                args_idxs = self.ptt.get_idx_args(idx)  # List of Children (Argument)
                 # print(f"Deap of idx={idx}: ", str(self.ptt[self.ptt.searchSubtree(idx)]))
                 # parent_idx = self.ptt.get_idx_parent(idx) # Index of the Parent
-                prim_name = self.ptt[idx].name # Get the Primitive Name
+                prim_name = self.ptt[idx].name  # Get the Primitive Name
                 # Note: Children of Composite Indicators can be Primitive and Terminal. We already processed the terminal. So check if the Primitive Children is processed.
                 # Otherwise skip. Remember that Primitive Children can be Simple or Composite Indicator, but Simple Indicators is already Processed.
                 # Need to reference _idx_ctrader because every non-composite indicators and primitives have been processed
                 temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
                 self._idx_composite_indicators[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
-                self._idx_ctrader[idx] = self._idx_composite_indicators[idx] # All Indexes to CTRADER
+                self._idx_ctrader[idx] = self._idx_composite_indicators[idx]  # All Indexes to CTRADER
 
         # print(f"Done Processing Composite Indicators!")
         # print("idx_ctrader: ", self._idx_ctrader)
@@ -527,15 +589,19 @@ class CTraderTranslator:
         # Remark: Sometimes if Composite Indicators is empty, there for it may throw an error in the following code block for Simple Signals.
         if len(self.ptt.simple_signal_primitive_ls) != 0:
             for idx in self.ptt.simple_signal_primitive_ls:
-                assert idx not in self._idx_ctrader.keys(), f"It seems that Simple Signal idx={idx} has been processed and included in _idx_ctrader"
-                assert idx not in self._idx_simple_signals.keys(), f"It seems that Simple Signal idx={idx} has been processed and included in _idx_simple_signals"
+                assert idx not in self._idx_ctrader.keys(), (
+                    f"It seems that Simple Signal idx={idx} has been processed and included in _idx_ctrader"
+                )
+                assert idx not in self._idx_simple_signals.keys(), (
+                    f"It seems that Simple Signal idx={idx} has been processed and included in _idx_simple_signals"
+                )
                 args_idxs = self.ptt.get_idx_args(idx)  # List of Children (Argument)
                 # parent_idx = self.ptt.get_idx_parent(idx)  # Index of the Parent
-                prim_name = self.ptt[idx].name # Get the Primitive Name
+                prim_name = self.ptt[idx].name  # Get the Primitive Name
 
                 temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
                 self._idx_simple_signals[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
-                self._idx_ctrader[idx] = self._idx_simple_signals[idx] # All Indexes to CTRADER
+                self._idx_ctrader[idx] = self._idx_simple_signals[idx]  # All Indexes to CTRADER
 
         # print(f"Done Processing Simple Signals!")
         # print("idx_ctrader: ", self._idx_ctrader)
@@ -547,20 +613,28 @@ class CTraderTranslator:
         if len(self.ptt.composite_signal_primitive_ls) != 0:
             # print("Processing Composite Signals")
             # print("Composite Signal Indexes:", self.ptt.composite_signal_primitive_ls)
-            assert all([i not in self._idx_ctrader.keys() for i in self.ptt.composite_signal_primitive_ls]), "One of the Composite Signal Index has been processed before starting!"
+            assert all([i not in self._idx_ctrader.keys() for i in self.ptt.composite_signal_primitive_ls]), (
+                "One of the Composite Signal Index has been processed before starting!"
+            )
             # Warn: Some Composite Signal may depend on other composite signal that has not been proccessed yet!
             #   We can solve this using reverse on the self.ptt.composite_signal_primitive_ls because the root will be the main composite signal.
             for idx in reversed(self.ptt.composite_signal_primitive_ls):
                 # print(f"processing composite signal idx={idx} ...")
                 # print(str(self.ptt[self.ptt.searchSubtree(idx)]))
-                assert idx not in self._idx_ctrader.keys() and idx not in self._idx_composite_signals.keys(), f"It seems that Composite Signal idx={idx} has been processed."
+                assert idx not in self._idx_ctrader.keys() and idx not in self._idx_composite_signals.keys(), (
+                    f"It seems that Composite Signal idx={idx} has been processed."
+                )
                 args_idxs = self.ptt.get_idx_args(idx)  # List of Children (Argument)
-                assert all([(i in self.ptt.signal_primitive_ls) for i in args_idxs]), "One of the Argument Index is Not a Signal! Fix this!"
-                assert all([i in self._idx_ctrader.keys() for i in args_idxs]), "One of the Argument Index is not processed and inserted in _idx_ctrader keys!"
+                assert all([(i in self.ptt.signal_primitive_ls) for i in args_idxs]), (
+                    "One of the Argument Index is Not a Signal! Fix this!"
+                )
+                assert all([i in self._idx_ctrader.keys() for i in args_idxs]), (
+                    "One of the Argument Index is not processed and inserted in _idx_ctrader keys!"
+                )
                 # print("Arg Indexes:", args_idxs)
                 prim_name = self.ptt[idx].name  # Get the Primitive Name
                 # print("Primitive Name:", prim_name)
-                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs)) # Get the processed arguments
+                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))  # Get the processed arguments
                 self._idx_composite_signals[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
                 self._idx_ctrader[idx] = self._idx_composite_signals[idx]  # All Indexes to CTRADER
 
@@ -602,17 +676,19 @@ class CTraderTranslator:
             return formatted_string
 
         # Create Code for Simple Indicator Primitives
-        i_d = 0 # For the indicator number e.g. indicator<num>
-        simple_indicator_temp_dict = OrderedDict() # Dict(Str->Str) For the variable name and expression e.g. "indicator0":<cTrader Expr> then clean later as "var indicator0 = <cTrader Expr>;"
-        simple_indicator_str_ls = [] # To be modified if not zero with [r"// Simple Indicators"]+simple_indicator_str_ls
-        temp_mapper_simple_indicator = OrderedDict() # Dict(Str -> Dict(Str->Str)) This is to map the original ctrader code expression to the key-value pair of simple_indicator_temp_dict
+        i_d = 0  # For the indicator number e.g. indicator<num>
+        simple_indicator_temp_dict = OrderedDict()  # Dict(Str->Str) For the variable name and expression e.g. "indicator0":<cTrader Expr> then clean later as "var indicator0 = <cTrader Expr>;"
+        simple_indicator_str_ls = []  # To be modified if not zero with [r"// Simple Indicators"]+simple_indicator_str_ls
+        temp_mapper_simple_indicator = OrderedDict()  # Dict(Str -> Dict(Str->Str)) This is to map the original ctrader code expression to the key-value pair of simple_indicator_temp_dict
         # Process Simple Indicators
         if len(self.ptt.simple_indicator_primitive_ls) != 0:
             for idx, ct_code_expr in self._idx_simple_indicators.items():
-                simple_indicator_temp_dict[fr"indicator{i_d}"] = ct_code_expr # Variable String to CTRADER expression
-                temp_mapper_simple_indicator[ct_code_expr] = {fr"indicator{i_d}": ct_code_expr} # Will be useful for signals.
-                simple_indicator_str_ls.append(fr"var indicator{i_d} = {ct_code_expr};") # Append the 1 line code
-                i_d += 1 # Update
+                simple_indicator_temp_dict[rf"indicator{i_d}"] = ct_code_expr  # Variable String to CTRADER expression
+                temp_mapper_simple_indicator[ct_code_expr] = {
+                    rf"indicator{i_d}": ct_code_expr
+                }  # Will be useful for signals.
+                simple_indicator_str_ls.append(rf"var indicator{i_d} = {ct_code_expr};")  # Append the 1 line code
+                i_d += 1  # Update
 
         # print("Simple Indicators")
         # print(simple_indicator_str_ls)
@@ -623,15 +699,22 @@ class CTraderTranslator:
         temp_mapper_composite_indicator = OrderedDict()  # OrderedDict(Str -> Dict(Str->Str)) This is to map the original ctrader code expression to the key-value pair of composite_indicator_temp_dict
         # Note: Need to iterate backwards in temp_mapper_composite_indicator, because we want to substitute variable of a more complex expression
         if len(self.ptt.composite_indicator_primitive_ls) != 0:
-            temp_ls = [self.ptt.get_idx_child_grandchild(i, exclude_root=False) for i in self.ptt.composite_indicator_primitive_ls]  # List[List[int]]
-            temp_ls = sorted(temp_ls, key=len, reverse=False)  # Sort a List of List of composite indicators (indexes) from Shortest to Longest Length
+            temp_ls = [
+                self.ptt.get_idx_child_grandchild(i, exclude_root=False)
+                for i in self.ptt.composite_indicator_primitive_ls
+            ]  # List[List[int]]
+            temp_ls = sorted(
+                temp_ls, key=len, reverse=False
+            )  # Sort a List of List of composite indicators (indexes) from Shortest to Longest Length
             temp_dict = {ls[0]: ls[1:] for ls in temp_ls}
             # for idx, ct_code_expr in self._idx_composite_indicators.items():
             # print("Testing Composite Indicator Primitives Code")
             for idx in list(temp_dict.keys()):
-                ct_code_expr = self._idx_composite_indicators[idx] # Original
+                ct_code_expr = self._idx_composite_indicators[idx]  # Original
                 # There is a possibility that a simple indicator or previous composite indicator in the loop is presset in current composite indicator.
-                ct_code_expr_ = copy.deepcopy(ct_code_expr) # Just to make sure we dont modify ct_code_expr from dictionary _idx_composite_indicators
+                ct_code_expr_ = copy.deepcopy(
+                    ct_code_expr
+                )  # Just to make sure we dont modify ct_code_expr from dictionary _idx_composite_indicators
                 # for variable_str, expr_str in composite_indicator_temp_dict.items(): # Check if some previous composite indicator expression is present in ct_code_expr
                 #     if expr_str in ct_code_expr_:
                 #         ct_code_expr_ = ct_code_expr_.replace(expr_str, variable_str)
@@ -639,48 +722,68 @@ class CTraderTranslator:
                     # Lets processed composite indicators is present in the current composite indicator
                     if original_expr in ct_code_expr:
                         var_str_repl = next(iter(composite_indicator_dict.keys()))
-                        ct_code_expr_ = ct_code_expr_.replace(original_expr, var_str_repl) # Only One Key representing the variable
-                for variable_str, expr_str in reversed(simple_indicator_temp_dict.items()): # Check if some simple indicator expression is present in ct_code_expr
+                        ct_code_expr_ = ct_code_expr_.replace(
+                            original_expr, var_str_repl
+                        )  # Only One Key representing the variable
+                for variable_str, expr_str in reversed(
+                    simple_indicator_temp_dict.items()
+                ):  # Check if some simple indicator expression is present in ct_code_expr
                     if expr_str in ct_code_expr:
                         ct_code_expr_ = ct_code_expr_.replace(expr_str, variable_str)
-                composite_indicator_temp_dict[fr"indicator{i_d}"] = ct_code_expr_  # Variable String to CTRADER expression
-                temp_mapper_composite_indicator[ct_code_expr] = {fr"indicator{i_d}": ct_code_expr_}  # Will be useful for signals.
-                composite_indicator_str_ls.append(fr"var indicator{i_d} = {ct_code_expr_};")  # Append the 1 line code
+                composite_indicator_temp_dict[rf"indicator{i_d}"] = (
+                    ct_code_expr_  # Variable String to CTRADER expression
+                )
+                temp_mapper_composite_indicator[ct_code_expr] = {
+                    rf"indicator{i_d}": ct_code_expr_
+                }  # Will be useful for signals.
+                composite_indicator_str_ls.append(rf"var indicator{i_d} = {ct_code_expr_};")  # Append the 1 line code
                 i_d += 1  # Update
 
         # print("Composite Indicator")
         # print(composite_indicator_str_ls)
 
-        i_d = 0 # Reset id for the Signals
-        temp_root_signal = None # Initialize temp_root_signal, at the end of this method, the value should not be None
+        i_d = 0  # Reset id for the Signals
+        temp_root_signal = None  # Initialize temp_root_signal, at the end of this method, the value should not be None
 
         # Create Code for Simple Signal Primitives
         simple_signal_temp_dict = OrderedDict()
         simple_signal_str_ls = []
         temp_mapper_simple_signal = OrderedDict()  # Dict(Str -> Dict(Str->Str)) This is to map the original ctrader code expression to the key-value pair of simple_temp_dict
         if len(self.ptt.simple_signal_primitive_ls) != 0:
-            temp_ls = [self.ptt.get_idx_child_grandchild(i, exclude_root=False) for i in self.ptt.simple_signal_primitive_ls]  # List[List[int]]
-            temp_ls = sorted(temp_ls, key=len, reverse=True)  # Sort a List of List of composite indicators (indexes) from Longest to Shortest Length
+            temp_ls = [
+                self.ptt.get_idx_child_grandchild(i, exclude_root=False) for i in self.ptt.simple_signal_primitive_ls
+            ]  # List[List[int]]
+            temp_ls = sorted(
+                temp_ls, key=len, reverse=True
+            )  # Sort a List of List of composite indicators (indexes) from Longest to Shortest Length
             temp_dict = {ls[0]: ls[1:] for ls in temp_ls}
             for idx in list(temp_dict.keys()):
                 ct_code_expr = self._idx_simple_signals[idx]  # Original
                 ct_code_expr_ = copy.deepcopy(ct_code_expr)  # Make a Deep Copy
-            # for idx, ct_code_expr in self._idx_simple_signals.items():
+                # for idx, ct_code_expr in self._idx_simple_signals.items():
                 # Need to do Composite Indicators First Because they are more complex in terms of expressions
-                for original_expr, composite_indicator_dict in reversed(temp_mapper_composite_indicator.items()): # Reverse the iteration on OrderedDict
+                for original_expr, composite_indicator_dict in reversed(
+                    temp_mapper_composite_indicator.items()
+                ):  # Reverse the iteration on OrderedDict
                     if original_expr in ct_code_expr:
-                        ct_code_expr_ = ct_code_expr_.replace(original_expr, next(iter(composite_indicator_dict.keys())))
+                        ct_code_expr_ = ct_code_expr_.replace(
+                            original_expr, next(iter(composite_indicator_dict.keys()))
+                        )
                 # Need to Check Simple Indicators because sometimes we are comparing Simples Indicators with some Complex Composite Indicators
-                for variable_str, expr_str in reversed(simple_indicator_temp_dict.items()): # Reverse the iteration on OrderedDict
+                for variable_str, expr_str in reversed(
+                    simple_indicator_temp_dict.items()
+                ):  # Reverse the iteration on OrderedDict
                     if expr_str in ct_code_expr:
                         ct_code_expr_ = ct_code_expr_.replace(expr_str, variable_str)
-                if ct_code_expr == self._idx_ctrader[0]:  # Check if Current Simple Signal is the Root Signal. If it is, store the modified value in the property
+                if (
+                    ct_code_expr == self._idx_ctrader[0]
+                ):  # Check if Current Simple Signal is the Root Signal. If it is, store the modified value in the property
                     self._root_signal = ct_code_expr_  # Store the modified value in the property _root_signal
-                    temp_root_signal = fr"signal{i_d}" # Temporarily store the root_signal where its value depend on either simple signal or composite signal
+                    temp_root_signal = rf"signal{i_d}"  # Temporarily store the root_signal where its value depend on either simple signal or composite signal
                     # simple_signal_str_ls.append(fr"var root_signal = {ct_code_expr_};")
-                simple_signal_temp_dict[fr"signal{i_d}"] = ct_code_expr_  # Variable String to CTRADER expression
-                temp_mapper_simple_signal[ct_code_expr] = {fr"signal{i_d}": ct_code_expr_}
-                simple_signal_str_ls.append(fr"var signal{i_d} = {ct_code_expr_};")  # Append the 1 line code
+                simple_signal_temp_dict[rf"signal{i_d}"] = ct_code_expr_  # Variable String to CTRADER expression
+                temp_mapper_simple_signal[ct_code_expr] = {rf"signal{i_d}": ct_code_expr_}
+                simple_signal_str_ls.append(rf"var signal{i_d} = {ct_code_expr_};")  # Append the 1 line code
 
                 # # If the Current ct_code_expr is the root signal, then just store the ctrader variable of the current ct_code_expr in root to avoid extra computation in ctrader
                 # if ct_code_expr == self._idx_ctrader[0]:  # Check if Current Simple Signal is the Root Signal. If it is, store the modified value in the property
@@ -701,16 +804,20 @@ class CTraderTranslator:
                 # Check if the processed Composite Signal is present in the current
                 for original_expr, composite_signal_dict in reversed(temp_mapper_composite_signal.items()):
                     if original_expr in ct_code_expr:
-                        ct_code_expr_ = ct_code_expr_.replace(original_expr, next(iter(composite_signal_dict.keys()))) # Replace the Original with a Variable from processed Composite Signals
+                        ct_code_expr_ = ct_code_expr_.replace(
+                            original_expr, next(iter(composite_signal_dict.keys()))
+                        )  # Replace the Original with a Variable from processed Composite Signals
                 for original_expr, simple_signal_dict in reversed(temp_mapper_simple_signal.items()):
                     if original_expr in ct_code_expr:
                         ct_code_expr_ = ct_code_expr_.replace(original_expr, next(iter(simple_signal_dict.keys())))
-                if ct_code_expr == self._idx_ctrader[0]: # Check if Current Composite is the Root Signal. If it is, store the modified value in the property
-                    self._root_signal = ct_code_expr_ # Store the modified value in the property _root_signal
-                    temp_root_signal = fr"signal{i_d}" # Temporarily store the root_signal where its value depend on either simple signal or composite signal
-                composite_signal_temp_dict[fr"signal{i_d}"] = ct_code_expr_  # Variable String to CTRADER expression
-                temp_mapper_composite_signal[ct_code_expr] = {fr"signal{i_d}": ct_code_expr_}
-                composite_signal_str_ls.append(fr"var signal{i_d} = {ct_code_expr_};")  # Append the 1 line code
+                if (
+                    ct_code_expr == self._idx_ctrader[0]
+                ):  # Check if Current Composite is the Root Signal. If it is, store the modified value in the property
+                    self._root_signal = ct_code_expr_  # Store the modified value in the property _root_signal
+                    temp_root_signal = rf"signal{i_d}"  # Temporarily store the root_signal where its value depend on either simple signal or composite signal
+                composite_signal_temp_dict[rf"signal{i_d}"] = ct_code_expr_  # Variable String to CTRADER expression
+                temp_mapper_composite_signal[ct_code_expr] = {rf"signal{i_d}": ct_code_expr_}
+                composite_signal_str_ls.append(rf"var signal{i_d} = {ct_code_expr_};")  # Append the 1 line code
 
                 # # If the Current ct_code_expr is the root signal, then just store the ctrader variable of the current ct_code_expr in root to avoid extra computation in ctrader
                 # if ct_code_expr == self._idx_ctrader[0]: # Check if Current Composite is the Root Signal. If it is, store the modified value in the property
@@ -734,17 +841,32 @@ class CTraderTranslator:
 
         assert temp_root_signal is not None, "temp_root_signal has not changed!"
 
-        x1 = format_string(*tuple([r"// Simple Indicators"] + simple_indicator_str_ls)) if len(simple_indicator_str_ls) != 0 else ""
-        x2 = format_string(*tuple([r"// Composite Indicators"] + composite_indicator_str_ls)) if len(composite_indicator_str_ls) != 0 else ""
-        x3 = format_string(*tuple([r"// Simple Signals"] + simple_signal_str_ls)) if len(simple_signal_str_ls) != 0 else ""
-        x4 = format_string(*tuple([r"// Composite Signals"] + composite_signal_str_ls)) if len(composite_signal_str_ls) != 0 else ""
-        out_str = format_string(*(x1, x2, x3, x4, r"// Root Signal", fr"var root_signal = {temp_root_signal};"))
+        x1 = (
+            format_string(*tuple([r"// Simple Indicators"] + simple_indicator_str_ls))
+            if len(simple_indicator_str_ls) != 0
+            else ""
+        )
+        x2 = (
+            format_string(*tuple([r"// Composite Indicators"] + composite_indicator_str_ls))
+            if len(composite_indicator_str_ls) != 0
+            else ""
+        )
+        x3 = (
+            format_string(*tuple([r"// Simple Signals"] + simple_signal_str_ls))
+            if len(simple_signal_str_ls) != 0
+            else ""
+        )
+        x4 = (
+            format_string(*tuple([r"// Composite Signals"] + composite_signal_str_ls))
+            if len(composite_signal_str_ls) != 0
+            else ""
+        )
+        out_str = format_string(*(x1, x2, x3, x4, r"// Root Signal", rf"var root_signal = {temp_root_signal};"))
         self._indicator_signal_code = out_str
-
 
     # TODO (Testing) Implement a class method to generate a full & valid ctrader code.
     # @_save_result_to_pickle(r"D:\Projects\FinDashAnalytics\Data\evoquant\Strategy cTrader Codes")
-    def get_complete_code(self, directory:str=None) -> str:
+    def get_complete_code(self, directory: str = None) -> str:
         """Returns a Complete and Valid cTrader C# Code
         Options: Return it as a String or Store it in a txt file (not C#).
         If the user chose to store the code in a txt file, they will have to open, then copy-paste in ctrader platform.
@@ -756,15 +878,20 @@ class CTraderTranslator:
         global _CTRADER_FULL_TEMPLATE
         import textwrap
 
-        template = Template(_CTRADER_FULL_TEMPLATE).safe_substitute(indicator_signal_code=self._indicator_signal_code, **self._strat_config)
+        template = Template(_CTRADER_FULL_TEMPLATE).safe_substitute(
+            indicator_signal_code=self._indicator_signal_code, **self._strat_config
+        )
         template = textwrap.dedent(template)
 
         # Store the Strategy Instance Full cTrader C# Code in the given directory
         if directory is not None:
-            import datetime, uuid, os
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S") # Get Current Date Time
-            unique_id = str(uuid.uuid4())[:8]   # Generate Random ID
-            filename = os.path.join(directory, fr"ctrader_code_{timestamp}_{unique_id}.txt")
+            import datetime
+            import os
+            import uuid
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")  # Get Current Date Time
+            unique_id = str(uuid.uuid4())[:8]  # Generate Random ID
+            filename = os.path.join(directory, rf"ctrader_code_{timestamp}_{unique_id}.txt")
             # Save the result as a pickle file
             with open(filename, "w") as file:
                 file.write(template)
@@ -772,10 +899,8 @@ class CTraderTranslator:
         return template
 
 
-
 # Idea here is to create a variable within translator_engine.base for full-code templates in ctrader, mt4, mt5, easylanguage, ninjatrader, etc.
-_CTRADER_FULL_TEMPLATE = \
-r"""
+_CTRADER_FULL_TEMPLATE = r"""
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1198,8 +1323,6 @@ namespace cAlgo.Robots
     }
 }
 """
-
-
 
 
 __all__ = ["PTTranslator", "CTraderTranslator"]

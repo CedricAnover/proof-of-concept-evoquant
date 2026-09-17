@@ -7,11 +7,11 @@ backtesting.py available through optional dependencies.
 
 from evoquant.backtest_engine.base import (
     BacktestConfig,
-    Trade,
-    BacktestResult,
     BacktestEngineAdapter,
-    MetricsCalculator,
     BacktestError,
+    BacktestResult,
+    MetricsCalculator,
+    Trade,
 )
 from evoquant.backtest_engine.nautilus_adapter import (
     NautilusBacktestEngine,
@@ -21,6 +21,7 @@ from evoquant.backtest_engine.nautilus_adapter import (
 # Legacy backtesting.py adapter - only import if backtesting is installed
 try:
     from evoquant.backtest_engine.evo_bt import EvoStrategy
+
     _HAS_LEGACY = True
 except ImportError:
     _HAS_LEGACY = False
