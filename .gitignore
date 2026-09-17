@@ -1,63 +1,44 @@
 ```
 # Dependencies
 uv.lock
-
-# Python
+.venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
-.ENV
-.ENV.*
-.venv.bak/
-env.bak/
 
-# Build/dist
+# Build and distribution artifacts
 build/
 dist/
-*.egg
-*.egg-info/
-.installed.cfg
 *.egg-info/
 
-# Testing
-.coverage
-coverage/
-htmlcov/
-.nox/
-.tox/
-.pytest_cache/
-.hypothesis/
-
-# Logs
+# Logs and temporary files
 *.log
+*.tmp
+*.swp
 
-# Environment variables
+# Environment files
 .env
 .env.local
-.env.*
-!.env.example
+*.env.*
 
-# IDE
+# Editors and IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-.DS_Store
-Thumbs.db
 
-# OS
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Icon?
 Thumbs.db
 ```

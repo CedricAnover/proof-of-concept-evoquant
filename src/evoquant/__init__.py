@@ -74,7 +74,16 @@ from evoquant.indicators import (
 
 from evoquant.orchestrator import Orchestrator, Evolver
 
-from evoquant.backtest_engine import EvoStrategy
+from evoquant.backtest_engine import (
+    NautilusBacktestEngine,
+    BacktestConfig,
+)
+
+# Legacy backtesting.py support - only import if available
+try:
+    from evoquant.backtest_engine import EvoStrategy
+except ImportError:
+    EvoStrategy = None
 
 from evoquant.translator_engine import PTTranslator, CTraderTranslator
 
@@ -148,11 +157,19 @@ __all__ = [
     # Orchestrator
     "Orchestrator",
     "Evolver",
-    # Backtest Engine
-    "EvoStrategy",
+    # Backtest Engine (NautilusTrader - primary)
+    "NautilusBacktestEngine",
+    "BacktestConfig",
     # Translator Engine
     "PTTranslator",
     "CTraderTranslator",
 ]
+
+# Add legacy backtesting support if available
+try:
+    from evoquant.backtest_engine import EvoStrategy
+    __all__.append("EvoStrategy")
+except ImportError:
+    pass
 
 __version__ = "0.1.0"
