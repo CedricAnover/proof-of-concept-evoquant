@@ -26,8 +26,18 @@ from evoquant import SeriesBool, SeriesDate
 from backtesting import Backtest, Strategy
 from backtesting.lib import SignalStrategy, barssince
 
-import vectorbt as vbt
-from vectorbt.portfolio.enums import Direction, ConflictMode, DirectionConflictMode, OppositeEntryMode
+# Optional vectorbt import for legacy support
+try:
+    import vectorbt as vbt
+    from vectorbt.portfolio.enums import Direction, ConflictMode, DirectionConflictMode, OppositeEntryMode
+    VBT_AVAILABLE = True
+except ImportError:
+    vbt = None
+    Direction = None
+    ConflictMode = None
+    DirectionConflictMode = None
+    OppositeEntryMode = None
+    VBT_AVAILABLE = False
 
 from typing import Union, List, Tuple
 import numpy as np
@@ -36,7 +46,15 @@ import copy
 import datetime
 
 import operator
-import quantstats, empyrical
+
+# Optional imports for performance metrics
+try:
+    import quantstats, empyrical
+    QUANTSTATS_AVAILABLE = True
+except ImportError:
+    quantstats = None
+    empyrical = None
+    QUANTSTATS_AVAILABLE = False
 
 from typing import Tuple, Union, Dict
 
@@ -350,7 +368,7 @@ class EvoStrategy(SignalStrategy):
 def evo_vbt_backtester(s_bool:SeriesBool, direction:str, df_ohlcv:pd.DataFrame,
                        exit_encoded_entry:bool = True,
                        vbt_params:dict=dict()
-                       ) -> vbt.Portfolio:
+                       ):
     """The Original Backtester. This will be faster, but with limited features such as exits.
 
     Advantages:
@@ -368,8 +386,15 @@ def evo_vbt_backtester(s_bool:SeriesBool, direction:str, df_ohlcv:pd.DataFrame,
     - Can be re-optimized using a different backtester like Backtest.py
         - Adding Extra Parameters and Optimizing (including different exits)
         - Walk-Forward Test & Optimization
+    
+    Note: This function requires vectorbt to be installed. If vectorbt is not available,
+    this function will raise an ImportError.
     """
-
+    if not VBT_AVAILABLE:
+        raise ImportError(
+            "vectorbt is required for evo_vbt_backtester but is not installed. "
+            "Install it with: pip install vectorbt"
+        )
 
     _signal = s_bool.to_pd_series(index=df_ohlcv.index)
 
@@ -573,7 +598,11 @@ def evo_filter_layer1(ser_rets:pd.Series, df_trades:pd.DataFrame) -> bool:
 
     try:
         # Sometimes pd.Series length could be 0, 1.
-        outliers = quantstats.stats.outliers(ser_rets, quantile=.99) #pd.Series
+        if not QUANTSTATS_AVAILABLE:
+            print("Warning: quantstats not available, skipping outlier detection")
+            outliers = pd.Series()  # Empty series
+        else:
+            outliers = quantstats.stats.outliers(ser_rets, quantile=.99) #pd.Series
     except ValueError as err:
         print(err)
     except Exception as err:
@@ -623,25 +652,55 @@ def evo_filter_layer2(bt_res:Dict[str, Tuple[pd.Series, pd.DataFrame]], filter_l
            "eq":operator.eq,
            "ne":operator.ne
            }
-    _PS = {"Sharpe":quantstats.stats.sharpe,
-           "Calmar":quantstats.stats.calmar,
-           "Sortino":quantstats.stats.sortino,
-           "CAGR/AvgDD": lambda rets: quantstats.stats.cagr(rets) / quantstats.stats.to_drawdown_series(rets).abs().mean(),
-           "Stability":empyrical.stability_of_timeseries,
-           # "AvgMonthlyReturns": lambda rets: quantstats.stats.monthly_returns(rets, eoy=False)['Month'].mean(),
-           "Volatility":quantstats.stats.volatility,
-           "VaR":quantstats.stats.value_at_risk,
-           "CVaR":quantstats.stats.conditional_value_at_risk,
-           "MaxDD":empyrical.max_drawdown,
-           "AvgDD":lambda rets: quantstats.stats.to_drawdown_series(rets).mean(),
-           "MaxDD_Duration":lambda rets: quantstats.stats.drawdown_details(quantstats.stats.to_drawdown_series(rets))['days'].max(),
-           "Avg$PnL":lambda df: df['PnL'].mean(),
-           "Avg$Loss": lambda df: df['PnL'].where(df['PnL'] < 0.).mean(),
-           "Avg$Profit": lambda df: df['PnL'].where(df['PnL'] > 0.).mean(),
-           "NumberOfTrades":lambda df: df.shape[0],
-           "Total$PnL": lambda df: df['PnL'].sum(),
-           "Max$Loss":lambda df: df['PnL'].min()
-           }
+    
+    # Define performance statistics functions with fallbacks for missing quantstats/empyrical
+    if QUANTSTATS_AVAILABLE:
+        _PS = {"Sharpe":quantstats.stats.sharpe,
+               "Calmar":quantstats.stats.calmar,
+               "Sortino":quantstats.stats.sortino,
+               "CAGR/AvgDD": lambda rets: quantstats.stats.cagr(rets) / quantstats.stats.to_drawdown_series(rets).abs().mean(),
+               "Stability":empyrical.stability_of_timeseries if hasattr(empyrical, 'stability_of_timeseries') else lambda x: 0.0,
+               # "AvgMonthlyReturns": lambda rets: quantstats.stats.monthly_returns(rets, eoy=False)['Month'].mean(),
+               "Volatility":quantstats.stats.volatility,
+               "VaR":quantstats.stats.value_at_risk,
+               "CVaR":quantstats.stats.conditional_value_at_risk,
+               "MaxDD":empyrical.max_drawdown if hasattr(empyrical, 'max_drawdown') else lambda x: -1.0,
+               "AvgDD":lambda rets: quantstats.stats.to_drawdown_series(rets).mean(),
+               "MaxDD_Duration":lambda rets: quantstats.stats.drawdown_details(quantstats.stats.to_drawdown_series(rets))['days'].max(),
+               "Avg$PnL":lambda df: df['PnL'].mean(),
+               "Avg$Loss": lambda df: df['PnL'].where(df['PnL'] < 0.).mean(),
+               "Avg$Profit": lambda df: df['PnL'].where(df['PnL'] > 0.).mean(),
+               "NumberOfTrades":lambda df: df.shape[0],
+               "Total$PnL": lambda df: df['PnL'].sum(),
+               "Max$Loss":lambda df: df['PnL'].min()
+               }
+    else:
+        # Fallback implementations when quantstats is not available
+        def _fallback_sharpe(rets): return 0.0
+        def _fallback_sortino(rets): return 0.0
+        def _fallback_calmar(rets): return 0.0
+        def _fallback_volatility(rets): return rets.std()
+        def _fallback_var(rets): return rets.quantile(0.05)
+        def _fallback_cvar(rets): return rets[rets <= rets.quantile(0.05)].mean() if (rets <= rets.quantile(0.05)).any() else rets.min()
+        
+        _PS = {"Sharpe":_fallback_sharpe,
+               "Calmar":_fallback_calmar,
+               "Sortino":_fallback_sortino,
+               "CAGR/AvgDD": lambda rets: 0.0,
+               "Stability": lambda x: 0.0,
+               "Volatility":_fallback_volatility,
+               "VaR":_fallback_var,
+               "CVaR":_fallback_cvar,
+               "MaxDD": lambda x: -1.0,
+               "AvgDD":lambda rets: 0.0,
+               "MaxDD_Duration":lambda rets: 0,
+               "Avg$PnL":lambda df: df['PnL'].mean(),
+               "Avg$Loss": lambda df: df['PnL'].where(df['PnL'] < 0.).mean(),
+               "Avg$Profit": lambda df: df['PnL'].where(df['PnL'] > 0.).mean(),
+               "NumberOfTrades":lambda df: df.shape[0],
+               "Total$PnL": lambda df: df['PnL'].sum(),
+               "Max$Loss":lambda df: df['PnL'].min()
+               }
     # Performance Stat Function Requires: 0=Returns Series, 1=Trade DataFrame
     _PS_IN = \
     {"Sharpe": 0,

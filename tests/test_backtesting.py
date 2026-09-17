@@ -2,15 +2,29 @@ import numpy as np
 
 from evoquant.base import SeriesBool
 from evoquant.backtest_engine.utils import *
-from evoquant.backtest_engine.evo_bt import EvoStrategy, evo_backtester, evo_filter_layer2, evo_filter_layer1, evo_vbt_backtester
+from evoquant.backtest_engine.evo_bt import EvoStrategy, evo_backtester, evo_filter_layer2, evo_filter_layer1
+# Only import evo_vbt_backtester if vectorbt is available
+try:
+    from evoquant.backtest_engine.evo_bt import evo_vbt_backtester
+    VBT_AVAILABLE = True
+except ImportError:
+    VBT_AVAILABLE = False
 from evoquant.backtest_engine.validation import *
 
 
 from backtesting import Backtest
 
 import pandas as pd
-import vectorbt as vbt
-from vectorbt.base.array_wrapper import ArrayWrapper
+
+# Optional vectorbt import for tests
+try:
+    import vectorbt as vbt
+    from vectorbt.base.array_wrapper import ArrayWrapper
+    VBT_INSTALLED = True
+except ImportError:
+    vbt = None
+    ArrayWrapper = None
+    VBT_INSTALLED = False
 
 import time
 import copy
@@ -65,21 +79,25 @@ ss_bool = SeriesBool(ss1 | ss2)
 # end_time = time.time()
 # print("Backtesting.py Speed:", end_time - start_time, "seconds")
 
-from vectorbt.signals import nb
-from numba import njit
-import pandas_ta as ta
+# Optional vectorbt-dependent code
+if VBT_INSTALLED:
+    from vectorbt.signals import nb
+    from numba import njit
+    import pandas_ta as ta
 
-test_arr = [random.choice([True, False]) for _ in range(df_ohlcv.shape[0])]
-test_arr = np.array(test_arr)
+    test_arr = [random.choice([True, False]) for _ in range(df_ohlcv.shape[0])]
+    test_arr = np.array(test_arr)
 
 
-# x_o, x_h, x_l, x_c, x_v, x_d
+    # x_o, x_h, x_l, x_c, x_v, x_d
 
-def all_exits(from_i, to_i, col, x):
-    # Array of Bools
-    return np.array([from_i]) # Array of Indexes
+    def all_exits(from_i, to_i, col, x):
+        # Array of Bools
+        return np.array([from_i]) # Array of Indexes
 
-res = \
-nb.generate_ex_nb(test_arr, 1, True, False, True, all_exits, df_ohlcv)
+    res = \
+    nb.generate_ex_nb(test_arr, 1, True, False, True, all_exits, df_ohlcv)
 
-print(res)
+    print(res)
+else:
+    print("vectorbt not installed, skipping vectorbt-dependent tests")

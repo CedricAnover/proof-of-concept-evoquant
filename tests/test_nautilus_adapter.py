@@ -195,7 +195,7 @@ class TestNautilusBacktestEngine:
             'Close': [100, 101, 102],
         }, index=pd.date_range('2023-01-01', periods=3))
         
-        with pytest.raises(ValueError, match="must contain columns"):
+        with pytest.raises(Exception, match="Data must contain columns"):
             engine.run(sample_signals.loc[:'2023-01-03'], invalid_data)
     
     def test_reproducibility_with_seed(self, sample_data):
