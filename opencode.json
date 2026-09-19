@@ -1,0 +1,46 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+
+    "references": {
+      "yfinance": {
+        "repository": "ranaroussi/yfinance",
+        "branch": "main",
+        "description": "Yahoo! Finance market data downloader"
+      },
+      "pandas": {
+        "repository": "pandas-dev/pandas",
+        "branch": "main",
+        "description": "Data analysis and manipulation tool"
+      },
+      "numpy": {
+        "repository": "numpy/numpy",
+        "branch": "main",
+        "description": "Fundamental package for scientific computing with Python"
+      },
+      "talib": {
+        "repository": "ta-lib/ta-lib-python",
+        "branch": "master",
+        "description": "Technical Analysis Library in Python"
+      },
+      "sklearn": {
+        "repository": "scikit-learn/scikit-learn",
+        "branch": "main",
+        "description": "Machine Learning in Python"
+      },
+      "nautilustrader": {
+        "repository": "nautechsystems/nautilus_trader",
+        "branch": "develop",
+        "description": "A trading platform for algorithmic trading"
+      },
+      "deap": {
+        "repository": "DEAP/deap",
+        "branch": "master",
+        "description": "Distributed Evolutionary Algorithms in Python"
+      },
+      "quantstats": {
+        "repository": "ranaroussi/quantstats",
+        "branch": "main",
+        "description": "Portfolio analytics in Python"
+      }
+    }
+}

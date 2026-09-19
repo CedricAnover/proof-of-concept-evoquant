@@ -1,0 +1,1 @@
+root_signal: (indicator0 > indicator1 && indicator0.Last(1) < indicator1.Last(1))

@@ -1,4 +1,3 @@
-```
 # Compiled Python files
 *.pyc
 __pycache__/
@@ -10,6 +9,7 @@ env/
 .env
 .env.local
 .env.*
+!*.env.example
 
 # Testing
 .pytest_cache/
@@ -36,4 +36,3 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-```

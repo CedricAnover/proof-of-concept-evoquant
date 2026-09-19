@@ -39,7 +39,13 @@ class SeriesBase:
             if is_datetime64_ns_dtype(in_series.dtype):
                 self._series = copy.deepcopy(in_series.values)
             elif in_series.dtype in [float, int, bool]:
-                self._series = copy.deepcopy(in_series.reset_index(drop=True).to_numpy(na_value=na_value))
+                clean = in_series.reset_index(drop=True)
+                if in_series.dtype == int and isinstance(na_value, float) and np.isnan(na_value):
+                    # Classic int arrays can neither contain nor represent NaN, and pandas
+                    # rejects a float na_value for them: convert as-is instead of crashing.
+                    self._series = copy.deepcopy(clean.to_numpy())
+                else:
+                    self._series = copy.deepcopy(clean.to_numpy(na_value=na_value))
             elif in_series.dtype in [object, str]:
                 self._series = copy.deepcopy(in_series.reset_index(drop=True).to_numpy(na_value=np.nan))
             else:

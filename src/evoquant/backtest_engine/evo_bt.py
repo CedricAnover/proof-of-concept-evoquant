@@ -47,15 +47,13 @@ import operator
 import numpy as np
 import pandas as pd
 
-# Optional imports for performance metrics
+# Optional import for performance metrics (quantstats is the single metrics backend)
 try:
-    import empyrical
     import quantstats
 
     QUANTSTATS_AVAILABLE = True
 except ImportError:
     quantstats = None
-    empyrical = None
     QUANTSTATS_AVAILABLE = False
 
 
@@ -552,11 +550,12 @@ def evo_backtester(
     When bt is run with bt.run(..), it will return a pd.Series object with additional properties:
     - _trades : pd.DataFrame, containing the trades. This is to be cleaned by a cleaner function.
     - _equity_curve: pd.DataFrame, containing the Equity progression in dollar from the given initial cash and DrawdownPct.
-        From this we can extract the percent or log returns from the dollar gains/losses. And use this as input for performance stat calculation (QuantStats or Empyrical)
+        From this we can extract the percent or log returns from the dollar gains/losses. And use this as input for performance stat calculation (quantstats)
     - _strategy : EvoStrategy(SignalStrategy), instance of EvoStrategy class.
 
     Notes:
     - We did not include the df_ohlcv, because we can access it in bt:Backtest instance.
+    - Strategy kwargs (direction, strategy_name, ...) must nest under strat_params; ser_bool is injected automatically.
     - Note that depending on the result, it's possible to return an empty Series or DataFrame. Check this in filtering and fitness calculations.
 
     Return
@@ -577,6 +576,22 @@ def evo_backtester(
         splitter_params = {}
     if cleaner_params is None:
         cleaner_params = {}
+
+    # Fail fast at the boundary: strategy kwargs must nest under strat_params
+    # (ser_bool is injected below); otherwise bt.run(**...) fails deep inside
+    # backtesting.py with an unhelpful TypeError.
+    if not isinstance(strat_params, dict):
+        raise TypeError(
+            "strat_params must be a dict of EvoStrategy kwargs "
+            "(e.g. {'direction': 'LongOnly', 'strategy_name': 'MyStrat'}), "
+            f"got {type(strat_params).__name__}."
+        )
+    missing = [k for k in ("direction", "strategy_name") if k not in strat_params]
+    if missing:
+        raise ValueError(
+            f"strat_params is missing required EvoStrategy kwargs: {missing}. "
+            "Provide at least 'direction' (LongOnly/ShortOnly/LongShort) and 'strategy_name' (str)."
+        )
 
     strat_params.update(ser_bool=ser_bool)  # Setting the value for ser_bool & direction
 
@@ -746,7 +761,7 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
         "ne": operator.ne,
     }
 
-    # Define performance statistics functions with fallbacks for missing quantstats/empyrical
+    # Define performance statistics functions with fallbacks for missing quantstats
     if QUANTSTATS_AVAILABLE:
         _ps = {
             "Sharpe": quantstats.stats.sharpe,
@@ -755,14 +770,13 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
             "CAGR/AvgDD": lambda rets: (
                 quantstats.stats.cagr(rets) / quantstats.stats.to_drawdown_series(rets).abs().mean()
             ),
-            "Stability": empyrical.stability_of_timeseries
-            if hasattr(empyrical, "stability_of_timeseries")
-            else lambda x: 0.0,
+            # quantstats has no stability-of-timeseries metric: neutral default.
+            "Stability": lambda x: 0.0,
             # "AvgMonthlyReturns": lambda rets: quantstats.stats.monthly_returns(rets, eoy=False)['Month'].mean(),
             "Volatility": quantstats.stats.volatility,
             "VaR": quantstats.stats.value_at_risk,
             "CVaR": quantstats.stats.conditional_value_at_risk,
-            "MaxDD": empyrical.max_drawdown if hasattr(empyrical, "max_drawdown") else lambda x: -1.0,
+            "MaxDD": quantstats.stats.max_drawdown,
             "AvgDD": lambda rets: quantstats.stats.to_drawdown_series(rets).mean(),
             "MaxDD_Duration": lambda rets: quantstats.stats.drawdown_details(quantstats.stats.to_drawdown_series(rets))[
                 "days"

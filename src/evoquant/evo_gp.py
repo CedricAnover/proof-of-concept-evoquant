@@ -23,13 +23,6 @@ except ImportError:
     _HAS_BACKTESTING = False
     Backtest = None
 
-# empyrical is an optional dependency for some performance stats (quantstats is the fallback)
-try:
-    import empyrical
-except ImportError:
-    empyrical = None
-
-
 from evoquant.backtest_engine.evo_bt import evo_backtester, evo_filter_layer1, evo_filter_layer2
 from evoquant.base import SeriesBool
 
@@ -356,7 +349,7 @@ class PerfStats:
         Fitness Values when rets and df_trades is set from set_fitness_required_args. The method will invoke _calc_fitness_values and automatically sets fitness values.
         This is dynamically changed everytime the evaluator is used.
     _PS : Dict[Str->Callable]
-        This dictionary contains all available performance statistics and their corresponding functions from empyrical, quantstats, or custom.
+        This dictionary contains all available performance statistics and their corresponding functions from quantstats or custom.
     fitness_targets:Tuple[float]
         Tuple of Float|Int containing the fitness targets to be used as exit criterion in a gp main algorithm.
 
@@ -375,7 +368,7 @@ class PerfStats:
     _calc_fitness_values() -> Tuple[Float|Int] | Tuple[np.nan]
         Used as the output for evo_evaluator. There's possibility that this method returns a Tuple[np.nan] either because
         one of the fitness calculation throws a ZeroDivisionError or OverflowError or other runtime errors from other
-        packages (empyrical or quantstats or backtesting). Special Case when there's only 1 fitness given. Output should still be
+        packages (quantstats or backtesting). Special Case when there's only 1 fitness given. Output should still be
         a tuple, so check with n_fitness parameter.
 
 
@@ -401,19 +394,13 @@ class PerfStats:
         "Calmar": quantstats.stats.calmar,
         "Sortino": quantstats.stats.sortino,
         "CAGR/AvgDD": lambda rets: quantstats.stats.cagr(rets) / quantstats.stats.to_drawdown_series(rets).abs().mean(),
-        # Use quantstats as fallback for empyrical functions
-        "Stability": lambda rets: (
-            getattr(empyrical, "stability_of_timeseries", lambda x: 0.0)(rets) if "empyrical" in globals() else 0.0
-        ),
+        # quantstats has no stability-of-timeseries metric: neutral default.
+        "Stability": lambda rets: 0.0,
         # "AvgMonthlyReturns": lambda rets: quantstats.stats.monthly_returns(rets, eoy=False)['Month'].mean(),
         "Volatility": quantstats.stats.volatility,
         "VaR": quantstats.stats.value_at_risk,
         "CVaR": quantstats.stats.conditional_value_at_risk,
-        "MaxDD": lambda rets: (
-            getattr(empyrical, "max_drawdown", quantstats.stats.max_drawdown)(rets)
-            if "empyrical" in globals()
-            else quantstats.stats.max_drawdown(rets)
-        ),
+        "MaxDD": quantstats.stats.max_drawdown,
         "AvgDD": lambda rets: quantstats.stats.to_drawdown_series(rets).mean(),
         "MaxDD_Duration": lambda rets: quantstats.stats.drawdown_details(quantstats.stats.to_drawdown_series(rets))[
             "days"
@@ -573,7 +560,7 @@ def evo_evaluator(
         1st Layer - Filtering out the anomalies (e.g. 1 Trade, No Trade, All True/False in SeriesBool, etc.)
         2nd Layer - Filtering in Individuals who pass the conditions for IS, OOS, and ISOOS.
         3rd Layer - Not included as this will be computationally expensive. This is done when the main GP loop is finished.
-    Note: Depending on the performance stat calculator (QuantStats or Empyrical), MaxDD values may be negative.
+    Note: MaxDD values from quantstats are negative (peak-to-trough decline).
     Note: For Individual that are anomalies, it may return a null or np.nan values in fitness(es). Which has to be part of rejection.
     """
     func_compiler = evo_compiler(individual, pset, pset_mapping)  # Compile the expression and get the unevaluated tree

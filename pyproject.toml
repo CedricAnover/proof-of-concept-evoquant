@@ -40,7 +40,6 @@ dev = [
 ]
 
 # Legacy backtesting engines (optional, for migration)
-# Note: empyrical has compatibility issues with Python 3.12+
 # Note: plotly<7.0.0 required because vectorbt 1.0.0 uses scattermapbox
 # which was removed in plotly 7.x (renamed to scattermap)
 [project.optional-dependencies]
