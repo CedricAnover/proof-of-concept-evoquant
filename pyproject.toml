@@ -1,0 +1,83 @@
+[project]
+name = "evoquant"
+version = "0.1.0"
+description = "Genetic programming framework for evolving and optimizing algorithmic trading strategies"
+readme = "README.md"
+authors = [
+    { name = "EvoQuant Contributors" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    # Core dependencies
+    "deap>=1.3.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0,<2.4.0",
+    "pandas-ta>=0.3.14b",
+    
+    # Backtesting - NautilusTrader as primary engine
+    "nautilus-trader>=1.231.0",
+    
+    # Performance metrics
+    "quantstats>=0.0.60",
+    
+    # Statistical analysis
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.0.0",
+    
+    # Performance optimization
+    "numba>=0.59.0",
+
+    # Template engine for code generation
+    "jinja2>=3.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+# Legacy backtesting engines (optional, for migration)
+# Note: empyrical has compatibility issues with Python 3.12+
+# Note: plotly<7.0.0 required because vectorbt 1.0.0 uses scattermapbox
+# which was removed in plotly 7.x (renamed to scattermap)
+[project.optional-dependencies]
+legacy = [
+    "backtesting>=0.6.0",
+    "vectorbt>=1.0.0",
+    "plotly<7.0.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["evoquant"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/evoquant/evoquant"
+Repository = "https://github.com/evoquant/evoquant"

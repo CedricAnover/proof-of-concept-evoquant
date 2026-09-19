@@ -1,32 +1,45 @@
 import numpy as np
+import pytest
 
 from evoquant.base import SeriesBool
-from evoquant.backtest_engine.utils import *
-from evoquant.backtest_engine.evo_bt import EvoStrategy, evo_backtester, evo_filter_layer2, evo_filter_layer1, evo_vbt_backtester
-from evoquant.backtest_engine.validation import *
 
+# Only import evo_vbt_backtester if vectorbt is available
+try:
+    from evoquant.backtest_engine.evo_bt import evo_vbt_backtester as evo_vbt_backtester
 
-from backtesting import Backtest
-
+    VBT_AVAILABLE = True
+except ImportError:
+    VBT_AVAILABLE = False
 import pandas as pd
-import vectorbt as vbt
-from vectorbt.base.array_wrapper import ArrayWrapper
 
-import time
-import copy
-import datetime
+# Optional vectorbt import for tests
+try:
+    import vectorbt as vbt
+    from vectorbt.base.array_wrapper import ArrayWrapper
+
+    VBT_INSTALLED = True
+except ImportError:
+    vbt = None
+    ArrayWrapper = None
+    VBT_INSTALLED = False
+
 import random
 
-# df_ohlcv = pd.read_csv("D:\Projects\FinDashAnalytics\Data\ASX OHLCV\HVN.csv")
-df_ohlcv = pd.read_csv(r"D:\Projects\FinDashAnalytics\Data\CTraderData\Clean\export-AUDUSD-Hour-BarChartHist.csv")
-df_ohlcv['Volume'] = df_ohlcv['Volume'].astype(float) # Convert Volume to Float and not int
-df_ohlcv['Date'] = pd.to_datetime(df_ohlcv['Date']) # Datetime
-df_ohlcv = copy.deepcopy(df_ohlcv)
-df_ohlcv.set_index('Date', inplace=True)
-# df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
-# df_ohlcv = df_ohlcv.sort_index()
-ss1 = df_ohlcv['Close'] > df_ohlcv['Close'].shift(5)
-ss2 = df_ohlcv['Close'] > df_ohlcv['Close'].rolling(200).mean()
+# Create sample OHLCV data for testing
+dates = pd.date_range(start="2023-01-01", periods=500, freq="h")
+df_ohlcv = pd.DataFrame(
+    {
+        "Date": dates,
+        "Open": np.random.uniform(100, 110, 500),
+        "High": np.random.uniform(110, 115, 500),
+        "Low": np.random.uniform(95, 100, 500),
+        "Close": np.random.uniform(100, 110, 500),
+        "Volume": np.random.randint(1000, 10000, 500).astype(float),
+    }
+)
+df_ohlcv.set_index("Date", inplace=True)
+ss1 = df_ohlcv["Close"] > df_ohlcv["Close"].shift(5)
+ss2 = df_ohlcv["Close"] > df_ohlcv["Close"].rolling(200).mean()
 ss_bool = SeriesBool(ss1 | ss2)
 
 # start_time = time.time()
@@ -65,21 +78,26 @@ ss_bool = SeriesBool(ss1 | ss2)
 # end_time = time.time()
 # print("Backtesting.py Speed:", end_time - start_time, "seconds")
 
-from vectorbt.signals import nb
-from numba import njit
-import pandas_ta as ta
 
-test_arr = [random.choice([True, False]) for _ in range(df_ohlcv.shape[0])]
-test_arr = np.array(test_arr)
+# Optional vectorbt-dependent code
+# Wrapped in a test function to avoid execution during pytest collection
+@pytest.mark.skip(reason="vectorbt 1.0.0 is incompatible with current numba typing for function-valued choice_func_nb")
+def test_vectorbt_generate_ex():
+    """Test vectorbt signal generation - requires vectorbt with compatible numba."""
+    if not VBT_INSTALLED:
+        pytest.skip("vectorbt not installed")
 
+    from vectorbt.signals import nb
 
-# x_o, x_h, x_l, x_c, x_v, x_d
+    test_arr = [random.choice([True, False]) for _ in range(df_ohlcv.shape[0])]
+    test_arr = np.array(test_arr)
 
-def all_exits(from_i, to_i, col, x):
-    # Array of Bools
-    return np.array([from_i]) # Array of Indexes
+    # x_o, x_h, x_l, x_c, x_v, x_d
 
-res = \
-nb.generate_ex_nb(test_arr, 1, True, False, True, all_exits, df_ohlcv)
+    def all_exits(from_i, to_i, col, x):
+        # Array of Bools
+        return np.array([from_i])  # Array of Indexes
 
-print(res)
+    res = nb.generate_ex_nb(test_arr, 1, True, False, True, all_exits, df_ohlcv)
+
+    print(res)

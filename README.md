@@ -25,12 +25,17 @@ pip install evoquant
 
 ### Dependencies
 
+Core dependencies:
 - `deap` - Distributed Evolutionary Algorithms in Python
 - `pandas` - Data manipulation
 - `numpy` - Numerical computing
 - `pandas_ta` - Technical analysis indicators
 - `backtesting` - Backtesting engine
-- `vectorbt` - Vectorized backtesting
+- `nautilus_trader` - High-performance backtesting and trading engine
+- `jinja2` - Template engine for code generation
+
+Optional dependencies:
+- `vectorbt` - Vectorized backtesting (legacy support)
 - `quantstats` - Portfolio analytics
 - `empyrical` - Financial risk metrics
 - `statsmodels` - Statistical tests
@@ -278,10 +283,6 @@ See the `tests/Example Generated Strategy/` directory for example evolved strate
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
 
-## License
-
-[Add your license here]
-
 ## Citation
 
 If you use EvoQuant in your research, please cite:
@@ -297,6 +298,6 @@ If you use EvoQuant in your research, please cite:
 
 - [DEAP](https://github.com/DEAP/deap) - Distributed Evolutionary Algorithms in Python
 - [backtesting.py](https://github.com/kernc/backtesting.py) - Backtesting framework
-- [vectorbt](https://github.com/polakowo/vectorbt) - Vectorized backtesting
 - [pandas-ta](https://github.com/twopirllc/pandas-ta) - Technical analysis library
-- [quantstats](https://github.com/ranaroussi/quantstats) - Portfolio analytics
+- [quantstats](https://github.com/ranaroussi/quantstats) - Portfolio analytics (optional)
+- [NautilusTrader](https://github.com/nautechsystems/nautilus_trader) - High-performance backtesting and trading engine
