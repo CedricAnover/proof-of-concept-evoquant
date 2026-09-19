@@ -81,6 +81,7 @@ ss_bool = SeriesBool(ss1 | ss2)
 # end_time = time.time()
 # print("Backtesting.py Speed:", end_time - start_time, "seconds")
 
+
 # Optional vectorbt-dependent code
 # Wrapped in a test function to avoid execution during pytest collection
 @pytest.mark.skip(reason="vectorbt 1.0.0 is incompatible with current numba typing for function-valued choice_func_nb")
