@@ -41,15 +41,20 @@ dev = [
 
 # Legacy backtesting engines (optional, for migration)
 # Note: empyrical has compatibility issues with Python 3.12+
+# Note: plotly<7.0.0 required because vectorbt 1.0.0 uses scattermapbox
+# which was removed in plotly 7.x (renamed to scattermap)
 [project.optional-dependencies]
 legacy = [
     "backtesting>=0.6.0",
     "vectorbt>=1.0.0",
+    "plotly<7.0.0",
 ]
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = ["E501"]
 

@@ -59,7 +59,6 @@ except ImportError:
     QUANTSTATS_AVAILABLE = False
 
 
-
 class EvoStrategy(SignalStrategy):
     """
     EvoStrategy Class has to be modified in DEAP GP to pass on the SeriesBool Signals.
@@ -321,7 +320,9 @@ class EvoStrategy(SignalStrategy):
                 # Calculate the SL Prices in different units (Percent, Pips, Points)
                 if self.stop_loss[1] == "Percent":  # e.g. (1%, 'Percent')
                     price_delta = (self.stop_loss[0] / 100.0) * trade.entry_price
-                elif self.stop_loss[1] == "Pip" or self.stop_loss[1] == "Point":  # e.g. (2->$2*0.0001 +- EntryPrice, 'Pip', 0.0001)
+                elif (
+                    self.stop_loss[1] == "Pip" or self.stop_loss[1] == "Point"
+                ):  # e.g. (2->$2*0.0001 +- EntryPrice, 'Pip', 0.0001)
                     price_delta = self.stop_loss[0] * self.stop_loss[2]
                 else:
                     raise
@@ -353,7 +354,9 @@ class EvoStrategy(SignalStrategy):
                 # Calculate the TP Prices in different units (Percent, Pips, Points)
                 if self.take_profit[1] == "Percent":  # e.g. (1%, 'Percent')
                     price_delta = (self.take_profit[0] / 100.0) * trade.entry_price
-                elif self.take_profit[1] == "Pip" or self.take_profit[1] == "Point":  # e.g. (2->$2*0.0001 +- EntryPrice, 'Pip', 0.0001)
+                elif (
+                    self.take_profit[1] == "Pip" or self.take_profit[1] == "Point"
+                ):  # e.g. (2->$2*0.0001 +- EntryPrice, 'Pip', 0.0001)
                     price_delta = self.take_profit[0] * self.take_profit[2]
                 else:
                     raise
@@ -568,7 +571,6 @@ def evo_backtester(
     """
 
     strat_params.update(ser_bool=ser_bool)  # Setting the value for ser_bool & direction
-
 
     # start_time = time.time()
     res = bt.run(**strat_params)  # IS-OOS Result

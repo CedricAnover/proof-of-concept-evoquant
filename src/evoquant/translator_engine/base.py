@@ -1,4 +1,3 @@
-
 import copy
 from collections import OrderedDict
 from string import Template

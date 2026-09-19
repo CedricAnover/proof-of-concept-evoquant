@@ -51,9 +51,7 @@ class BlockingTimeSeriesSplit:
             yield indices[start:mid], indices[mid + self.margin : stop]
 
 
-def multi_linear_is_oos(
-    in_df: pd.Series | pd.DataFrame, n_splits=2, train_ratio=0.6, margin=0, date_only: bool = True
-):
+def multi_linear_is_oos(in_df: pd.Series | pd.DataFrame, n_splits=2, train_ratio=0.6, margin=0, date_only: bool = True):
     if (not isinstance(n_splits, int)) or (n_splits < 2):
         raise ValueError("n_splits must be an integer and at least 2.")
 

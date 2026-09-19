@@ -1,6 +1,5 @@
 """Tests for the NautilusTrader backtest engine adapter."""
 
-
 import numpy as np
 import pandas as pd
 import pytest
