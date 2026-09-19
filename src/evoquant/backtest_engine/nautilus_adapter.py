@@ -213,7 +213,7 @@ class NautilusBacktestEngine(BacktestEngineAdapter):
             )
 
         except Exception as e:
-            raise BacktestError(f"NautilusTrader backtest failed: {str(e)}", cause=e)
+            raise BacktestError(f"NautilusTrader backtest failed: {str(e)}", cause=e) from e
 
     def _simulate_trading(
         self, signals: pd.Series, data: pd.DataFrame, long_entries: pd.Series, long_exits: pd.Series

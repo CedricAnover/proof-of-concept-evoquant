@@ -1,12 +1,13 @@
+import inspect
+
 import numpy as np
 import pandas_ta as ta
 
-from evoquant.base import *
-from evoquant.signals import *
+from evoquant.base import Lag, ParameterBase, Period, SeriesBase, SeriesFloat
 
 
 def shift(ser: SeriesFloat, lag: Lag) -> SeriesFloat:
-    assert type(lag) == Lag
+    assert isinstance(lag, Lag)
     res = SeriesFloat(ser.to_pd_series().shift(lag.value).reset_index(drop=True), name="Shift", na_value=np.nan)
     return res
 
@@ -30,7 +31,7 @@ def abs_diff(ser1: SeriesFloat, ser2: SeriesFloat) -> SeriesFloat:
 
 def sma(ser: SeriesFloat, period: Period) -> SeriesFloat:
     """Simple Moving Average Indicator"""
-    assert type(period) == Period
+    assert isinstance(period, Period)
     # return ser.to_pd_series().rolling(period.value).mean()
     return SeriesFloat(ta.sma(ser.to_pd_series(), length=period.value), name="SMA")
 
@@ -98,7 +99,7 @@ pset.addPrimitive(series_cross_below_value_rule, [RSI, RSIValue], SeriesBool, na
 pset.addPrimitive(series_above_value_rule, [RSI, RSIValue], SeriesBool, name="series_above_value_rule")
 pset.addPrimitive(series_below_value_rule, [RSI, RSIValue], SeriesBool, name="series_below_value_rule")
 
-if Quantile not in terminal_types: terminal_types.append(Quantile) 
+if Quantile not in terminal_types: terminal_types.append(Quantile)
 if Period not in terminal_types: terminal_types.append(Period)
 if Lag not in terminal_types: terminal_types.append(Lag)
 if RSIValue not in terminal_types: terminal_types.append(RSIValue)
@@ -165,7 +166,7 @@ pset.addPrimitive(cross_below_rule, [ZScore, ZScore], SeriesBool, name="cross_be
 pset.addPrimitive(is_above_rule, [ZScore, ZScore], SeriesBool, name="is_above_rule")
 pset.addPrimitive(is_below_rule, [ZScore, ZScore], SeriesBool, name="is_below_rule")
 
-if Quantile not in terminal_types: terminal_types.append(Quantile) 
+if Quantile not in terminal_types: terminal_types.append(Quantile)
 if Period not in terminal_types: terminal_types.append(Period)
 if Lag not in terminal_types: terminal_types.append(Lag)
 if ZScoreValue not in terminal_types: terminal_types.append(ZScoreValue)
@@ -263,7 +264,6 @@ def bbands(ser: SeriesFloat, period: Period, std: StdDev, mamode: MAMode, bbout:
 # -----------------------------------------------------------------------------------------------------------------------
 
 ########################################################################################################################
-import inspect
 
 
 def list_module_contents():

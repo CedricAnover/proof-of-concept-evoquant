@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from evoquant.base import *
-from evoquant.indicators import *
-from evoquant.signals import *
+from evoquant.base import SeriesBool
+from evoquant.signals import and3_or3
 
 """
 Test indicators with synthetic data

@@ -4,9 +4,8 @@ import time
 import numpy as np
 import pandas as pd
 
-from evoquant.base import *
-from evoquant.indicators import *
-from evoquant.signals import *
+from evoquant.base import SeriesBool, SeriesClose, SeriesDate, SeriesHigh, SeriesLow, SeriesOpen, SeriesVolume
+from evoquant.signals import and_rule3
 
 # Create synthetic OHLCV data for testing
 np.random.seed(42)
@@ -39,8 +38,6 @@ x_low = SeriesLow(df_ohlcv["Low"].values)
 x_close = SeriesClose(df_ohlcv["Close"].values)
 x_volume = SeriesVolume(df_ohlcv["Volume"].values)
 x_ls = [x_open, x_high, x_low, x_close, x_volume]
-
-from evoquant.signals import and_rule3
 
 ser1 = SeriesBool(np.array([random.choice([True, False, np.nan]) for _ in range(1000000)]))
 ser2 = SeriesBool(np.array([random.choice([True, False, np.nan]) for _ in range(1000000)]))

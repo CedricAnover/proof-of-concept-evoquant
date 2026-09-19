@@ -24,8 +24,8 @@ from backtesting.lib import SignalStrategy, barssince
 
 from evoquant import SeriesBool
 
-from .utils import *
-from .validation import *
+from .utils import backtesting_result_cleaner, extract_start_end_true
+from .validation import linear_is_oos, multi_linear_is_oos
 
 # Optional vectorbt import for legacy support
 try:
@@ -102,10 +102,10 @@ class EvoStrategy(SignalStrategy):
 
     # For Fixed SL & TP
     # e.g. (1%->$(1/100)*EntryPrice +- EntryPrice, 'Percent') (2->$2*0.0001 +- EntryPrice, 'Pip', 0.0001) (2->$2*0.01, "Point", $0.01) ["Percent", "Pip", "Point"]
-    stop_loss: tuple = tuple()
+    stop_loss: tuple = ()
 
     # TODO: Implement EvoStrategy for Parameter take_profit
-    take_profit: tuple = tuple()
+    take_profit: tuple = ()
     # Trade Size. If float between 0. & 1., then its it is interpreted as a fraction of current available liquidity.
     #             If int at least 1, indicates an absolute number of units.
 
@@ -116,7 +116,7 @@ class EvoStrategy(SignalStrategy):
     def init(self):
         super().init()
         # Edit the behaviour here (entries, exits, and others)...
-        if (self.ser_bool == None) or (not isinstance(self.ser_bool, SeriesBool)):
+        if (self.ser_bool is None) or (not isinstance(self.ser_bool, SeriesBool)):
             raise ValueError(
                 "EvoStrategy.ser_bool requires a SeriesBool instance."
             )  # Throw error if self.ser_bool is not given
@@ -132,9 +132,9 @@ class EvoStrategy(SignalStrategy):
         # ---- Private Properties
         self._price_delta = None
 
-        if self.start_date == None:
+        if self.start_date is None:
             self.start_date = self.data.index.min().date()
-        if self.end_date == None:
+        if self.end_date is None:
             self.end_date = self.data.index.max().date()
         # print("Start: ", self.start_date)
         # print("End: ", self.end_date)
@@ -251,7 +251,7 @@ class EvoStrategy(SignalStrategy):
                 super().next()
 
     def run_exit_after_n_bars(self):
-        if self.exit_after_n_bars == None:
+        if self.exit_after_n_bars is None:
             return
         if len(self.trades) == 0:
             # If we have no open trades, then pass.
@@ -262,7 +262,7 @@ class EvoStrategy(SignalStrategy):
             trade.close()
 
     def run_exit_after_n_days(self):
-        if self.exit_after_n_days == None:
+        if self.exit_after_n_days is None:
             return
         if len(self.trades) == 0:
             # If we have no open trades, then pass.
@@ -313,7 +313,7 @@ class EvoStrategy(SignalStrategy):
         else:
             assert len(self.trades) == 1
             trade = self.trades[0]  # Remember that Trade.sl & Trade.tp are prices.
-            if trade.sl != None:
+            if trade.sl is not None:
                 # If open trade already has SL, then pass.
                 return
             else:
@@ -347,7 +347,7 @@ class EvoStrategy(SignalStrategy):
         else:
             assert len(self.trades) == 1
             trade = self.trades[0]  # Remember that Trade.sl & Trade.tp are prices.
-            if trade.tp != None:
+            if trade.tp is not None:
                 # If open trade already has TP, then pass.
                 return
             else:
@@ -369,7 +369,7 @@ class EvoStrategy(SignalStrategy):
                 return
 
     def run_exit_when_pnl_lessthan(self):
-        if self.exit_when_pnl_lessthan == None:
+        if self.exit_when_pnl_lessthan is None:
             return
         if self.exit_when_pnl_lessthan >= 0 or not isinstance(self.exit_when_pnl_lessthan, (float, int)):
             raise ValueError("ExitWhenPnLLessThan must be negative number.")
@@ -395,7 +395,7 @@ class EvoStrategy(SignalStrategy):
         assert len(self.trades) == 1
         trade = self.trades[0]
 
-        assert trade.sl != None, "The Stop-Loss of the Trade is not yet set."
+        assert trade.sl is not None, "The Stop-Loss of the Trade is not yet set."
 
         # Remind that we are at current bars close. When we make trades or updates, it will be executed on next bar's open
         if trade.is_long:
@@ -412,7 +412,7 @@ def evo_vbt_backtester(
     direction: str,
     df_ohlcv: pd.DataFrame,
     exit_encoded_entry: bool = True,
-    vbt_params: dict = dict(),
+    vbt_params: dict | None = None,
 ):
     """The Original Backtester. This will be faster, but with limited features such as exits.
 
@@ -435,6 +435,8 @@ def evo_vbt_backtester(
     Note: This function requires vectorbt to be installed. If vectorbt is not available,
     this function will raise an ImportError.
     """
+    if vbt_params is None:
+        vbt_params = {}
     if not VBT_AVAILABLE:
         raise ImportError(
             "vectorbt is required for evo_vbt_backtester but is not installed. Install it with: pip install vectorbt"
@@ -537,11 +539,11 @@ def evo_vbt_backtester(
 def evo_backtester(
     ser_bool: SeriesBool,
     bt: Backtest,
-    strat_params: dict = dict(),
+    strat_params: dict | None = None,
     splitter_func: callable = linear_is_oos,
     cleaner_func: callable = backtesting_result_cleaner,
-    splitter_params: dict = dict(),
-    cleaner_params: dict = dict(),
+    splitter_params: dict | None = None,
+    cleaner_params: dict | None = None,
     use_pct_rets: bool = True,
 ) -> dict[str, tuple[pd.Series, pd.DataFrame]]:
     """
@@ -569,6 +571,12 @@ def evo_backtester(
     bt_res["OOS"](1) = pd.DataFrame([....], index=<Depends on Splitter>)
     bt_res["ISOOS"](1) = pd.DataFrame([....], index=<Depends on Splitter>)
     """
+    if strat_params is None:
+        strat_params = {}
+    if splitter_params is None:
+        splitter_params = {}
+    if cleaner_params is None:
+        cleaner_params = {}
 
     strat_params.update(ser_bool=ser_bool)  # Setting the value for ser_bool & direction
 
@@ -578,10 +586,7 @@ def evo_backtester(
     # print("Bt Run Time:", end_time - start_time, "seconds")
 
     # Clean the ._trades DataFrame
-    if cleaner_func != None:
-        df_trades = cleaner_func(res._trades, **cleaner_params)
-    else:
-        df_trades = copy.deepcopy(res._trades)
+    df_trades = cleaner_func(res._trades, **cleaner_params) if cleaner_func is not None else copy.deepcopy(res._trades)
 
     # Have to convert EntryTime and ExitTime as date because its considered as dtype=datetime64[ns]
     try:
@@ -608,7 +613,7 @@ def evo_backtester(
         raise ValueError("The Splitter Function has to be valid.")
 
     if splitter_func == linear_is_oos:  # ((is_start_date, is_end_date), (oos_start_date, oos_end_date))
-        out_dict = dict()
+        out_dict = {}
         tup_is, tup_oos = splitter_func(bt._data, **splitter_params)
         ind_is = bt._data.loc[tup_is[0] : tup_is[1]].index
         ind_oos = bt._data.loc[tup_oos[0] : tup_oos[1]].index
@@ -625,7 +630,7 @@ def evo_backtester(
     if (
         splitter_func == multi_linear_is_oos
     ):  # out_dict[0]["IS"][0], out_dict[0]["IS"][1], out_dict[0]["OOS"][0], out_dict[0]["OOS"][1]
-        out_dict = dict()
+        out_dict = {}
         out_dict["IS"] = [
             pd.Series(dtype=float),
             pd.DataFrame(),
@@ -705,13 +710,9 @@ def evo_filter_layer1(ser_rets: pd.Series, df_trades: pd.DataFrame) -> bool:
         (1 + ser_rets).cumprod()[-1] <= 0.05
     ):  # Lost Money or Bankrupt, False if Final Cumulative return is less than 100% of our equity, i.e We didnt make money at all
         return False
-    if (
-        not outliers.empty and outliers[outliers > 0.0].shape[0] > 100
-    ):  # Nothing wrong with winning, but if there are extremely big winners it will affect some value of performance stats.
-        return False
-
+    # Nothing wrong with winning, but if there are extremely big winners it will affect some value of performance stats.
     # Returns True if All Filters are Passed
-    return True
+    return not (not outliers.empty and outliers[outliers > 0.0].shape[0] > 100)
 
 
 def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_list) -> bool:
@@ -736,7 +737,7 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
     There are cases where performance stat require benchmark such as alpha, beta. In general, there are cases where performance stats are parametrized.
     """
 
-    _OP = {
+    _op = {
         "gt": operator.gt,
         "ge": operator.ge,
         "lt": operator.lt,
@@ -747,7 +748,7 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
 
     # Define performance statistics functions with fallbacks for missing quantstats/empyrical
     if QUANTSTATS_AVAILABLE:
-        _PS = {
+        _ps = {
             "Sharpe": quantstats.stats.sharpe,
             "Calmar": quantstats.stats.calmar,
             "Sortino": quantstats.stats.sortino,
@@ -793,7 +794,7 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
         def _fallback_cvar(rets):
             return rets[rets <= rets.quantile(0.05)].mean() if (rets <= rets.quantile(0.05)).any() else rets.min()
 
-        _PS = {
+        _ps = {
             "Sharpe": _fallback_sharpe,
             "Calmar": _fallback_calmar,
             "Sortino": _fallback_sortino,
@@ -813,7 +814,7 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
             "Max$Loss": lambda df: df["PnL"].min(),
         }
     # Performance Stat Function Requires: 0=Returns Series, 1=Trade DataFrame
-    _PS_IN = {
+    _ps_in = {
         "Sharpe": 0,
         "Calmar": 0,
         "Sortino": 0,
@@ -838,18 +839,18 @@ def evo_filter_layer2(bt_res: dict[str, tuple[pd.Series, pd.DataFrame]], filter_
     for tup in filter_list:  # (IS-OOS mode, Perf Stat, Operator, Value, Perf Stat Parameters)
         assert (
             (tup[0] in ["IS", "OOS", "ISOOS"])
-            and (tup[1] in _PS.keys())
-            and (tup[2] in _OP)
+            and (tup[1] in _ps)
+            and (tup[2] in _op)
             and (isinstance(tup[3], (float, int)))
             and (isinstance(tup[4], dict))
         )
         try:
-            if _PS_IN[tup[1]] == 0:
-                f = _OP[tup[2]](_PS[tup[1]](bt_res[tup[0]][0], **tup[4]), tup[3])
+            if _ps_in[tup[1]] == 0:
+                f = _op[tup[2]](_ps[tup[1]](bt_res[tup[0]][0], **tup[4]), tup[3])
                 if not f:
                     return False
-            if _PS_IN[tup[1]] == 1:
-                f = _OP[tup[2]](_PS[tup[1]](bt_res[tup[0]][1], **tup[4]), tup[3])
+            if _ps_in[tup[1]] == 1:
+                f = _op[tup[2]](_ps[tup[1]](bt_res[tup[0]][1], **tup[4]), tup[3])
                 if not f:
                     return False
         except ZeroDivisionError:  # If it catches any kind of errors including ZeroDivisionError and OverflowError

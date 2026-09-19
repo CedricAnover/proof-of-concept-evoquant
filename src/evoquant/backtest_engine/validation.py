@@ -36,11 +36,11 @@ class BlockingTimeSeriesSplit:
         self.train_ratio = train_ratio
         self.margin = margin
 
-    def get_n_splits(self, X, y, groups):
+    def get_n_splits(self, x, y, groups):
         return self.n_splits
 
-    def split(self, X, y=None, groups=None):
-        n_samples = len(X)
+    def split(self, x, y=None, groups=None):
+        n_samples = len(x)
         k_fold_size = n_samples // self.n_splits
         indices = np.arange(n_samples)
 
@@ -56,16 +56,14 @@ def multi_linear_is_oos(in_df: pd.Series | pd.DataFrame, n_splits=2, train_ratio
         raise ValueError("n_splits must be an integer and at least 2.")
 
     bts = BlockingTimeSeriesSplit(n_splits, train_ratio, margin=margin)
-    out_dict = dict()
-    i = 0
-    for train_index, test_index in bts.split(in_df.index):
+    out_dict = {}
+    for i, (train_index, test_index) in enumerate(bts.split(in_df.index)):
         train = in_df.iloc[train_index]
         test = in_df.iloc[test_index]
         out_dict[i] = {
             "IS": (train.index.to_series().min().date(), train.index.to_series().max().date()),
             "OOS": (test.index.to_series().min().date(), test.index.to_series().max().date()),
         }
-        i += 1
     return out_dict  # out_dict[0]["IS"][0], out_dict[0]["IS"][1], out_dict[0]["OOS"][0], out_dict[0]["OOS"][1]
 
 

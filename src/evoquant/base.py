@@ -33,24 +33,24 @@ class SeriesBase:
     def __init__(self, in_series: pd.Series | np.ndarray, name=None, na_value=np.nan):
         # Convert in_series to a np.ndarray. Make sure to deep copy and keep the null values if any and Reset the Index to integer.
         self._size = len(in_series)  # Get the length immediately
-        if type(in_series) == pd.Series:
+        if isinstance(in_series, pd.Series):
             from pandas.api.types import is_datetime64_ns_dtype
 
             if is_datetime64_ns_dtype(in_series.dtype):
                 self._series = copy.deepcopy(in_series.values)
             elif in_series.dtype in [float, int, bool]:
                 self._series = copy.deepcopy(in_series.reset_index(drop=True).to_numpy(na_value=na_value))
-            elif in_series.dtype in [np.object, str]:
+            elif in_series.dtype in [object, str]:
                 self._series = copy.deepcopy(in_series.reset_index(drop=True).to_numpy(na_value=np.nan))
             else:
-                raise "Cannot convert the input series to a numpy ndarray!"
-        elif type(in_series) == np.ndarray:
+                raise TypeError("Cannot convert the input series to a numpy ndarray!")
+        elif isinstance(in_series, np.ndarray):
             # WARN: By default, Numpy would treat the dtype as float (and can accept dtype int & bool)!
             self._series = copy.deepcopy(in_series)
             if self._series.dtype in [float, int, bool]:
                 self._series[np.isnan(self._series)] = na_value  # This only work for float or int
                 self._series = np.asarray(self._series)
-            elif self._series.dtype == np.object:
+            elif self._series.dtype == object:
                 raise TypeError("If in_series is np.ndarray, SeriesBase can only handle dtype of float. :(")
         else:
             raise TypeError("The type of in_series must be either pandas.Series or numpy.ndarray!")
@@ -85,7 +85,7 @@ class SeriesBase:
 
     def to_pd_series(self, *args, **kwargs) -> pd.Series:
         """Convert & Return the pd.Series of self.series"""
-        return copy.deepcopy(pd.Series(self._series, name=self._name, *args, **kwargs))
+        return copy.deepcopy(pd.Series(self._series, *args, name=self._name, **kwargs))
 
 
 class SeriesFloat(SeriesBase):
@@ -94,22 +94,22 @@ class SeriesFloat(SeriesBase):
     def __init__(self, in_series, name=None, na_value=np.nan):
         super().__init__(in_series, name=name, na_value=na_value)
         # Check if the dtypes in have at least 1 float and no other dtypes in series. Otherwise, return an error.
-        if self._d_type != float:
+        if self._d_type != np.dtype(float):
             raise TypeError("D-type of the given series has to be float.")
 
-        assert self._d_type == float
+        assert self._d_type == np.dtype(float)
 
         # Make Sure to Convert the numpy array as a float. Make a Deep Copy.
         self._series = copy.deepcopy(self._series.astype("float", casting="unsafe"))
         self._d_type = self._series.dtype
 
     @classmethod
-    def is_stationary(self):
+    def is_stationary(cls):
         from statsmodels.tsa.stattools import adfuller
 
-        result = adfuller(self._series)
+        result = adfuller(cls._series)
         p_value = result[1]
-        return True if p_value <= 0.05 else False
+        return p_value <= 0.05
 
 
 class SeriesIndicator(SeriesFloat, SeriesBase):
@@ -152,10 +152,10 @@ class SeriesBool(SeriesBase):
         super().__init__(in_series, name=name, na_value=na_value)
         if self._d_type not in [bool]:
             # Need to make sure that if dtype is object, it should only contain bool or np.nan
-            if np.all(np.logical_or(self._series == True, self._series == False, self._series == np.nan)):
+            if np.all((self._series == 1) | (self._series == 0) | (self._series != self._series)):
                 self._series = copy.deepcopy(self._series.astype("bool", casting="unsafe"))
                 self._d_type = self._series.dtype
-                assert self._d_type == bool
+                assert self._d_type == np.dtype(bool)
             else:
                 raise TypeError("The Series contain values that are neither bool or np.nan")
 
@@ -174,18 +174,18 @@ class SeriesBool(SeriesBase):
         def out_signals(x, signal_mode=signal_mode, type_mode=type_mode):
             if type_mode == "int":
                 if signal_mode == "long":
-                    return 1 if x == True else 0
+                    return 1 if x else 0
                 if signal_mode == "short":
-                    return -1 if x == True else 0
+                    return -1 if x else 0
                 if signal_mode == "longshort":
-                    return 1 if x == True else -1
+                    return 1 if x else -1
             if type_mode == "str":
                 if signal_mode == "long":
-                    return "Buy" if x == True else "Flat"
+                    return "Buy" if x else "Flat"
                 if signal_mode == "short":
-                    return "Sell" if x == True else "Flat"
+                    return "Sell" if x else "Flat"
                 if signal_mode == "longshort":
-                    return "Buy" if x == True else "Sell"
+                    return "Buy" if x else "Sell"
 
         applyall = np.vectorize(out_signals)
         return applyall(self._series, signal_mode=signal_mode, type_mode=type_mode)  # np.ndarray

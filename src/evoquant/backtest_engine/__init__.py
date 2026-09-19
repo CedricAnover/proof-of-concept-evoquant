@@ -27,9 +27,6 @@ except ImportError:
     _HAS_LEGACY = False
     EvoStrategy = None
 
-from evoquant.backtest_engine.utils import *
-from evoquant.backtest_engine.validation import *
-
 __all__ = [
     # Base classes
     "BacktestConfig",

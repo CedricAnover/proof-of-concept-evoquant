@@ -1,7 +1,9 @@
+import inspect
+
 import numpy as np
 import pandas as pd
 
-from evoquant.base import *
+from evoquant.base import Lag, ParameterBase, Period, SeriesBool, SeriesDate, SeriesFloat
 
 
 def _shift_array(arr, window_size, direction="right"):
@@ -111,92 +113,92 @@ def and2_or1(ser1: SeriesBool, ser2: SeriesBool, ser3: SeriesBool, ser4: SeriesB
 
 def and3_or1(*args) -> SeriesBool:
     assert len(args) == 6, "There must be 6 arguments for and3_or1 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and3_or1 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and3_or1 must be SeriesBool"
     return or_rule(and_rule3(*args[:3]), and_rule3(*args[3:]))
 
 
 def and2_or2(*args) -> SeriesBool:
     assert len(args) == 6, "There must be 6 arguments for and2_or2 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and2_or2 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and2_or2 must be SeriesBool"
     return or_rule3(and_rule(*args[:2]), and_rule(*args[2:4]), and_rule(*args[4:]))
 
 
 def and3_or2(*args) -> SeriesBool:
     assert len(args) == 9, "There must be 9 arguments for and3_or2 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and3_or2 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and3_or2 must be SeriesBool"
     return or_rule3(and_rule3(*args[:3]), and_rule3(*args[3:6]), and_rule3(*args[6:]))
 
 
 def and2_or3(*args) -> SeriesBool:
     assert len(args) == 8, "There must be 8 arguments for and2_or3 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and2_or3 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and2_or3 must be SeriesBool"
     return or_rule4(and_rule(*args[:2]), and_rule(*args[2:4]), and_rule(*args[4:6]), and_rule(*args[6:]))
 
 
 def and3_or3(*args) -> SeriesBool:
     assert len(args) == 12, "There must be 12 arguments for and3_or3 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and3_or3 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and3_or3 must be SeriesBool"
     return or_rule4(and_rule3(*args[:3]), and_rule3(*args[3:6]), and_rule3(*args[6:9]), and_rule3(*args[9:]))
 
 
 def and4_or1(*args) -> SeriesBool:
     assert len(args) == 8, "There must be 8 arguments for and4_or1 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of and4_or1 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of and4_or1 must be SeriesBool"
     return or_rule(and_rule4(*args[:4]), and_rule4(*args[4:]))
 
 
 # -----------------------------------------------------------------------------------------------------------------------
 def or2_and1(*args) -> SeriesBool:
     assert len(args) == 4, "There must be 4 arguments for or2_and1 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or2_and1 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or2_and1 must be SeriesBool"
     return and_rule(or_rule(*args[:2]), or_rule(*args[2:]))
 
 
 def or3_and1(*args) -> SeriesBool:
     assert len(args) == 6, "There must be 6 arguments for or3_and1 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or3_and1 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or3_and1 must be SeriesBool"
     return and_rule(or_rule3(*args[:3]), or_rule3(*args[3:]))
 
 
 def or4_and1(*args) -> SeriesBool:
     assert len(args) == 8, "There must be 8 arguments for or4_and1 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or4_and1 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or4_and1 must be SeriesBool"
     return and_rule(or_rule4(*args[:4]), or_rule4(*args[4:]))
 
 
 def or2_and2(*args) -> SeriesBool:
     assert len(args) == 6, "There must be 6 arguments for or2_and2 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or2_and2 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or2_and2 must be SeriesBool"
     return and_rule3(or_rule(*args[:2]), or_rule(*args[2:4]), or_rule(*args[4:6]))
 
 
 def or3_and2(*args) -> SeriesBool:
     assert len(args) == 9, "There must be 9 arguments for or3_and2 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or3_and2 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or3_and2 must be SeriesBool"
     return and_rule3(or_rule3(*args[:3]), or_rule3(*args[3:6]), or_rule3(*args[6:]))
 
 
 def or4_and2(*args) -> SeriesBool:
     assert len(args) == 12, "There must be 12 arguments for or4_and2 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or4_and2 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or4_and2 must be SeriesBool"
     return and_rule3(or_rule4(*args[:4]), or_rule4(*args[4:8]), or_rule4(*args[8:]))
 
 
 def or2_and3(*args) -> SeriesBool:
     assert len(args) == 8, "There must be 8 arguments for or2_and3 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or2_and3 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or2_and3 must be SeriesBool"
     return and_rule4(or_rule(*args[:2]), or_rule(*args[2:4]), or_rule(*args[4:6]), or_rule(*args[6:]))
 
 
 def or3_and3(*args) -> SeriesBool:
     assert len(args) == 12, "There must be 12 arguments for or3_and3 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or3_and3 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or3_and3 must be SeriesBool"
     return and_rule4(or_rule3(*args[:3]), or_rule3(*args[3:6]), or_rule3(*args[6:9]), or_rule3(*args[9:]))
 
 
 def or4_and3(*args) -> SeriesBool:
     assert len(args) == 16, "There must be 16 arguments for or4_and3 signal primitive"
-    assert all([type(elem) == SeriesBool for elem in args]), "All arguments of or4_and3 must be SeriesBool"
+    assert all(isinstance(elem, SeriesBool) for elem in args), "All arguments of or4_and3 must be SeriesBool"
     return and_rule4(or_rule4(*args[:4]), or_rule4(*args[4:8]), or_rule4(*args[8:12]), or_rule4(*args[12:]))
 
 
@@ -285,7 +287,7 @@ class IncrDecrNBars(ParameterBase):
 
 
 def is_incr_n_bars_rule(ser: SeriesFloat, nbars: IncrDecrNBars) -> SeriesBool:
-    assert type(nbars) == IncrDecrNBars
+    assert isinstance(nbars, IncrDecrNBars)
     return SeriesBool(
         ser.to_pd_series()
         .rolling(window=nbars.value)
@@ -296,7 +298,7 @@ def is_incr_n_bars_rule(ser: SeriesFloat, nbars: IncrDecrNBars) -> SeriesBool:
 
 
 def is_decr_n_bars_rule(ser: SeriesFloat, nbars: IncrDecrNBars) -> SeriesBool:
-    assert type(nbars) == IncrDecrNBars
+    assert isinstance(nbars, IncrDecrNBars)
     return SeriesBool(
         ser.to_pd_series()
         .rolling(window=nbars.value)
@@ -317,7 +319,7 @@ class HighLowNBars(ParameterBase):
 
 
 def is_highest_n_bars_rule(ser: SeriesFloat, nbars: HighLowNBars) -> SeriesBool:
-    assert type(nbars) == HighLowNBars
+    assert isinstance(nbars, HighLowNBars)
     return SeriesBool(
         ser.to_pd_series().rolling(window=nbars.value).apply(lambda x: x[-1] == max(x), raw=True),
         name="IsHighest",
@@ -326,7 +328,7 @@ def is_highest_n_bars_rule(ser: SeriesFloat, nbars: HighLowNBars) -> SeriesBool:
 
 
 def is_lowest_n_bars_rule(ser: SeriesFloat, nbars: HighLowNBars) -> SeriesBool:
-    assert type(nbars) == HighLowNBars
+    assert isinstance(nbars, HighLowNBars)
     return SeriesBool(
         ser.to_pd_series().rolling(window=nbars.value).apply(lambda x: x[-1] == min(x), raw=True),
         name="IsLowest",
@@ -404,27 +406,27 @@ class HourInDay(ParameterBase):
 
 
 def day_of_week_rule(ser: SeriesDate, dow: DayOfWeek) -> SeriesBool:
-    assert type(dow) == DayOfWeek
+    assert isinstance(dow, DayOfWeek)
     return SeriesBool(np.equal(ser.day_of_week, dow.value), name="IsDayOfWeek", na_value=False)
 
 
 def month_in_year_rule(ser: SeriesDate, miy: MonthInYear) -> SeriesBool:
-    assert type(miy) == MonthInYear
+    assert isinstance(miy, MonthInYear)
     return SeriesBool(np.equal(ser.month_in_year, miy.value), name="IsMonthInYear", na_value=False)
 
 
 def hour_in_day_rule(ser: SeriesDate, hid: HourInDay) -> SeriesBool:
-    assert type(hid) == HourInDay
+    assert isinstance(hid, HourInDay)
     return SeriesBool(np.equal(ser.hour_in_day, hid.value), name="IsHourInDay", na_value=False)
 
 
 def hour_in_day_ge_rule(ser: SeriesDate, hid: HourInDay) -> SeriesBool:
-    assert type(hid) == HourInDay
+    assert isinstance(hid, HourInDay)
     return SeriesBool(np.greater_equal(ser.hour_in_day, hid.value), name="IsHourInDayGE", na_value=False)
 
 
 def hour_in_day_le_rule(ser: SeriesDate, hid: HourInDay) -> SeriesBool:
-    assert type(hid) == HourInDay
+    assert isinstance(hid, HourInDay)
     return SeriesBool(np.less_equal(ser.hour_in_day, hid.value), name="IsHourInDayLE", na_value=False)
 
 
@@ -550,7 +552,6 @@ def series_below_value_rule(ser: SeriesFloat, val: ParameterBase) -> SeriesBool:
 
 
 # -----------------------------------------------------------------------------------------------------------------------
-import inspect
 
 
 def list_module_contents():

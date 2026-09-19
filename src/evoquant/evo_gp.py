@@ -1,10 +1,10 @@
+import contextlib
 import copy
 import datetime
 import inspect
 import os
 import pickle
 import random
-import sys
 import uuid
 from functools import partial
 from itertools import combinations_with_replacement
@@ -12,7 +12,7 @@ from itertools import combinations_with_replacement
 import numpy as np
 import pandas as pd
 import quantstats
-from deap import gp
+from deap import base, gp
 
 # Legacy backtesting.py - only import if available for backward compatibility
 try:
@@ -23,7 +23,14 @@ except ImportError:
     _HAS_BACKTESTING = False
     Backtest = None
 
+# empyrical is an optional dependency for some performance stats (quantstats is the fallback)
+try:
+    import empyrical
+except ImportError:
+    empyrical = None
 
+
+from evoquant.backtest_engine.evo_bt import evo_backtester, evo_filter_layer1, evo_filter_layer2
 from evoquant.base import SeriesBool
 
 
@@ -97,13 +104,10 @@ def generate_safe(pset, min_, max_, terminal_types, type_=None):
         if type_ in terminal_types:
             try:
                 term = random.choice(pset.terminals[type_])
-            except IndexError:
-                _, _, traceback = sys.exc_info()
+            except IndexError as err:
                 raise IndexError(
-                    "The gp.generate function tried to add "
-                    "a terminal of type '%s', but there is "
-                    "none available." % (type_,)
-                ).with_traceback(traceback)
+                    f"The gp.generate function tried to add a terminal of type '{type_}', but there is none available."
+                ) from err
             if inspect.isclass(term):
                 term = term()
             expr.append(term)
@@ -112,7 +116,7 @@ def generate_safe(pset, min_, max_, terminal_types, type_=None):
                 # Might not be respected if there is a type without terminal args
                 if height <= depth or (depth >= min_ and random.random() < pset.terminalRatio):
                     primitives_with_only_terminal_args = [
-                        p for p in pset.primitives[type_] if all([arg in terminal_types for arg in p.args])
+                        p for p in pset.primitives[type_] if all(arg in terminal_types for arg in p.args)
                     ]
                     if len(primitives_with_only_terminal_args) == 0:
                         prim = random.choice(pset.primitives[type_])
@@ -120,13 +124,10 @@ def generate_safe(pset, min_, max_, terminal_types, type_=None):
                         prim = random.choice(primitives_with_only_terminal_args)
                 else:
                     prim = random.choice(pset.primitives[type_])
-            except IndexError:
-                _, _, traceback = sys.exc_info()
+            except IndexError as err:
                 raise IndexError(
-                    "The gp.generate function tried to add "
-                    "a primitive of type '%s', but there is "
-                    "none available." % (type_,)
-                ).with_traceback(traceback)
+                    f"The gp.generate function tried to add a primitive of type '{type_}', but there is none available."
+                ) from err
             expr.append(prim)
             for arg in reversed(prim.args):
                 stack.append((depth + 1, arg))
@@ -146,13 +147,10 @@ def generate_composite_signal_root(pset, min_, max_, terminal_types, type_=None)
         if type_ in terminal_types:
             try:
                 term = random.choice(pset.terminals[type_])
-            except IndexError:
-                _, _, traceback = sys.exc_info()
+            except IndexError as err:
                 raise IndexError(
-                    "The gp.generate function tried to add "
-                    "a terminal of type '%s', but there is "
-                    "none available." % (type_,)
-                ).with_traceback(traceback)
+                    f"The gp.generate function tried to add a terminal of type '{type_}', but there is none available."
+                ) from err
             if inspect.isclass(term):
                 term = term()
             expr.append(term)
@@ -160,13 +158,13 @@ def generate_composite_signal_root(pset, min_, max_, terminal_types, type_=None)
             try:
                 if i == 0:  # At the Root
                     primitives_with_seriesbool_args = [
-                        p for p in pset.primitives[type_] if all([arg == SeriesBool for arg in p.args])
+                        p for p in pset.primitives[type_] if all(arg == SeriesBool for arg in p.args)
                     ]
                     prim = random.choice(primitives_with_seriesbool_args)
                 # Might not be respected if there is a type without terminal args
                 elif height <= depth or (depth >= min_ and random.random() < pset.terminalRatio):
                     primitives_with_only_terminal_args = [
-                        p for p in pset.primitives[type_] if all([arg in terminal_types for arg in p.args])
+                        p for p in pset.primitives[type_] if all(arg in terminal_types for arg in p.args)
                     ]
                     if len(primitives_with_only_terminal_args) == 0:  # i.e. Its Terminal
                         prim = random.choice(pset.primitives[type_])
@@ -174,13 +172,10 @@ def generate_composite_signal_root(pset, min_, max_, terminal_types, type_=None)
                         prim = random.choice(primitives_with_only_terminal_args)
                 else:
                     prim = random.choice(pset.primitives[type_])
-            except IndexError:
-                _, _, traceback = sys.exc_info()
+            except IndexError as err:
                 raise IndexError(
-                    "The gp.generate function tried to add "
-                    "a primitive of type '%s', but there is "
-                    "none available." % (type_,)
-                ).with_traceback(traceback)
+                    f"The gp.generate function tried to add a primitive of type '{type_}', but there is none available."
+                ) from err
             expr.append(prim)
             for arg in reversed(prim.args):
                 stack.append((depth + 1, arg))
@@ -223,14 +218,7 @@ def is_fitness_tuple_valid(in_tup: tuple | list) -> bool:
     #
     out_ls = []
     for i in in_tup:
-        if (
-            not np.isnan(i)
-            and not np.isinf(i)
-            and i is not None
-            and i != ""
-            and type(i) != type(None)
-            and isinstance(i, (float, int))
-        ):
+        if not np.isnan(i) and not np.isinf(i) and i is not None and i != "" and isinstance(i, (float, int)):
             out_ls.append(True)
         else:
             out_ls.append(False)
@@ -251,8 +239,10 @@ def evo_mutation(
     individual: gp.PrimitiveTree,
     expr: callable,
     pset: gp.PrimitiveSetTyped,
-    mutators=[gp.mutShrink, gp.mutUniform, gp.mutNodeReplacement, gp.mutEphemeral, gp.mutInsert],
+    mutators: list | None = None,
 ):
+    if mutators is None:
+        mutators = [gp.mutShrink, gp.mutUniform, gp.mutNodeReplacement, gp.mutEphemeral, gp.mutInsert]
 
     ind = copy.deepcopy(
         individual
@@ -466,11 +456,11 @@ class PerfStats:
     def __init__(self, *in_fits_weights):
         assert len(in_fits_weights) >= 1
         self.n_fitness = len(in_fits_weights)
-        self.fitness_names, self.weights = zip(*in_fits_weights)
+        self.fitness_names, self.weights = zip(*in_fits_weights, strict=False)
         assert isinstance(self.fitness_names, tuple) and isinstance(self.weights, tuple)
 
         for name in self.fitness_names:
-            if (name not in self._PS.keys()) or (not isinstance(name, str)):
+            if (name not in self._PS) or (not isinstance(name, str)):
                 print(f"Valid Fitness Names: \n{self._PS}")
                 raise ValueError("The Fitness Names has to be valid.")
         for w in self.weights:
@@ -483,7 +473,7 @@ class PerfStats:
 
     @classmethod
     def from_lists(cls, fitness_names: list[str], weights: list[float | int]):
-        return cls(*list(zip(fitness_names, weights)))
+        return cls(*zip(fitness_names, weights, strict=False))
 
     @classmethod
     def get_fitness_func(cls, fitness_name: str) -> callable:
@@ -508,7 +498,7 @@ class PerfStats:
         if (
             not isinstance(in_fitness_targets, (list, tuple))
             or len(in_fitness_targets) != self.n_fitness
-            or any([not isinstance(i, (float, int)) for i in in_fitness_targets])
+            or any(not isinstance(i, (float, int)) for i in in_fitness_targets)
         ):
             raise ValueError("The Fitness Target(s) is Invalid.")
         self._fitness_targets = in_fitness_targets
@@ -535,26 +525,16 @@ class PerfStats:
                     f = self._PS[f_name](self.rets)
                 if self._PS_IN[f_name] == 1:  # Fitness Function Requires Trades DataFrame
                     f = self._PS[f_name](self.df_trades)
-            except:  # If we catch any error from calculating a Fitness, append np.nan
+            except Exception:  # If we catch any error from calculating a Fitness, append np.nan
                 temp_fitness_values.append(np.nan)
             else:  # If it didn't throw any error, we still need to check if the value is valid, otherwise append np.nan
-                if (
-                    not np.isnan(f)
-                    and not np.isinf(f)
-                    and f is not None
-                    and f != ""
-                    and type(f) != type(None)
-                    and isinstance(f, (float, int))
-                ):
+                if not np.isnan(f) and not np.isinf(f) and f is not None and f != "" and isinstance(f, (float, int)):
                     temp_fitness_values.append(
                         float(f)
                     )  # Need to convert to float, otherwise it will include float and int in tuple which causes TypeError.
                 else:
                     temp_fitness_values.append(np.nan)
         return temp_fitness_values
-
-
-from evoquant.backtest_engine.evo_bt import evo_backtester, evo_filter_layer1, evo_filter_layer2
 
 
 def evo_evaluator(
@@ -567,7 +547,7 @@ def evo_evaluator(
     perf_stats: PerfStats,
     use_filter_layer1: bool = True,
     use_filter_layer2: bool = False,
-    filter_layer2_list: list[tuple[str, str, str, float | int, dict]] = [],
+    filter_layer2_list: list[tuple[str, str, str, float | int, dict]] | None = None,
 ) -> tuple:
     """This function will be the bridge between the backtesting engine and GP. This will be used DEAP toolbox
     toolbox.register(evo_evaluator, *args, **kwargs)
@@ -619,7 +599,7 @@ def evo_evaluator(
         print(str(err))
         return perf_stats.invalid_values
     except Exception as err:
-        raise Exception(str(err))
+        raise Exception(str(err)) from err
 
     # Calculate the In-Sample Fitness Values in PerfStats Object
     # Remember that PerfStats needs to be instantiated outside of this function.
@@ -636,7 +616,7 @@ def evo_evaluator(
             return perf_stats.invalid_values
 
     if use_filter_layer2:
-        if len(filter_layer2_list) == 0:
+        if not filter_layer2_list:
             raise ValueError("List of Layer 2 filters must be given.")
         filter_layer2 = evo_filter_layer2(evo_bt_res, filter_layer2_list)
         if not filter_layer2:
@@ -649,16 +629,16 @@ def evo_evaluator(
     # individual.fitness.values = copy.deepcopy(perf_stats.fitness_values)
 
     # Check if the Individual's Fitness Value(s) has satisfied the Fitness Target(s), if given.
-    if perf_stats.fitness_targets != None:
+    if perf_stats.fitness_targets is not None:
         # The perf_stats.fitness_targets has been given and therefore can be compared.
         # Fitness Values has been processed by perf_stats, its either valid or invalid.
         # all([tup for tup in zip(perf_stats.weights, out_fitness_values)])
-        if all([np.isnan(f) for f in out_fitness_values]):
+        if all(np.isnan(f) for f in out_fitness_values):
             individual.fitness_achieved = False
             return out_fitness_values
         else:  # If the fitness values are valid
             check_ls = []
-            for tup in zip(perf_stats.fitness_targets, perf_stats.weights, out_fitness_values):
+            for tup in zip(perf_stats.fitness_targets, perf_stats.weights, out_fitness_values, strict=False):
                 if tup[1] > 0:  # "max"
                     check_ls.append(tup[2] > tup[0])
                 else:  # "min"
@@ -687,13 +667,13 @@ def transform_to_single_objective(
     if method == "weighted_sum":
         # Calculate the weighted sum
         single_obj_value = sum(
-            weight * normalized_value for weight, normalized_value in zip(weights, normalized_values)
+            weight * normalized_value for weight, normalized_value in zip(weights, normalized_values, strict=False)
         )
         return single_obj_value
     if method == "tchebycheff":
         # Calculate the maximum weighted value
         max_weighted_value = max(
-            weight * normalized_value for weight, normalized_value in zip(weights, normalized_values)
+            weight * normalized_value for weight, normalized_value in zip(weights, normalized_values, strict=False)
         )
         return max_weighted_value
 
@@ -716,9 +696,6 @@ def eval_modifier(individual: gp.PrimitiveTree, evaluator: callable):
     return individual  # Return the 'evaluated'/modified Individual
 
 
-from deap import base
-
-
 # @_measure_execution_time
 def gp_main_algo_random(
     toolbox: base.Toolbox,
@@ -728,10 +705,8 @@ def gp_main_algo_random(
     n_gen=25,
     single_fitness_method: str = "weighted_sum",
     fitness_idx=None,
-    gp_algo_exit_params=dict(
-        no_evol_after_ngen=10, check_fitness_targets=True, after_n_hours=24, no_valid_pop_after_n_gen=5
-    ),
-    concurrent_exec_params=dict(n_processors=None, chunksize=None, timeout=None),
+    gp_algo_exit_params: dict | None = None,
+    concurrent_exec_params: dict | None = None,
 ) -> list[gp.PrimitiveTree] | list[None]:
     """This function is the implementation for the gp main algorithm. This uses random generation method without any evolution.
 
@@ -752,6 +727,16 @@ def gp_main_algo_random(
     import concurrent.futures
     import math
     import multiprocessing
+
+    if gp_algo_exit_params is None:
+        gp_algo_exit_params = {
+            "no_evol_after_ngen": 10,
+            "check_fitness_targets": True,
+            "after_n_hours": 24,
+            "no_valid_pop_after_n_gen": 5,
+        }
+    if concurrent_exec_params is None:
+        concurrent_exec_params = {"n_processors": None, "chunksize": None, "timeout": None}
 
     if concurrent_exec_params["n_processors"] is None:  # Check Number of Logical Processors
         concurrent_exec_params["n_processors"] = multiprocessing.cpu_count()
@@ -777,9 +762,9 @@ def gp_main_algo_random(
     else:  # Using Multi-Objective/Fitness Functions
         is_single_fitness = False  # Set is_single_fitness. To be used later.
         # Check if objective are maximization or minimization based on weights.
-        if all([(w > 0) for w in perf_stats.weights]):
+        if all(w > 0 for w in perf_stats.weights):
             optim_direction = "max"
-        elif all([(w < 0) for w in perf_stats.weights]):
+        elif all(w < 0 for w in perf_stats.weights):
             optim_direction = "min"
         else:  # Mix Direction. Which would also depend on the input of the user.
             if optim_direction is None or optim_direction not in ["max", "min"]:  # Check if optim_direction is given.
@@ -800,12 +785,9 @@ def gp_main_algo_random(
         pop_size
     )  # Create a list of unevaluated gp.PrimitiveTree. This list will be modified on runtime.
     with concurrent.futures.ProcessPoolExecutor(max_workers=concurrent_exec_params["n_processors"]) as executor:
-        subpop = [
-            ind
-            for ind in executor.map(
-                toolbox.eval_modifier, pop, chunksize=chunk_size, timeout=concurrent_exec_params["timeout"]
-            )
-        ]
+        subpop = list(
+            executor.map(toolbox.eval_modifier, pop, chunksize=chunk_size, timeout=concurrent_exec_params["timeout"])
+        )
         executor.shutdown()
     subpop = [ind for ind in subpop if is_fitness_tuple_valid(ind.fitness.values)]
     subpop_size = len(subpop)
@@ -815,10 +797,7 @@ def gp_main_algo_random(
         print(_.fitness.values, "|", _)
 
     # For the exit when there is no valid population after n generations.
-    if subpop_size == 0:
-        count_no_valid_pop = 1
-    else:
-        count_no_valid_pop = 0
+    count_no_valid_pop = 1 if subpop_size == 0 else 0
 
     # For exit when there is no improvement or evolution in the optimal individual.
     count_no_evolution = 0
@@ -833,12 +812,11 @@ def gp_main_algo_random(
 
         # Evaluate the new_pop
         with concurrent.futures.ProcessPoolExecutor(max_workers=concurrent_exec_params["n_processors"]) as executor:
-            sub_new_pop = [
-                ind
-                for ind in executor.map(
+            sub_new_pop = list(
+                executor.map(
                     toolbox.eval_modifier, new_pop, chunksize=chunk_size, timeout=concurrent_exec_params["timeout"]
                 )
-            ]
+            )
             executor.shutdown()
         sub_new_pop = [ind for ind in sub_new_pop if is_fitness_tuple_valid(ind.fitness.values)]
         sub_new_pop_size = len(sub_new_pop)
@@ -910,10 +888,8 @@ def gp_main_algo_random(
             print(_.fitness.values, "|", _)
         print("\n")
         print("\n")
-        try:
+        with contextlib.suppress(BaseException):
             print(f"Optimal Individual at Gen={gen} with fitness={subpop[-1].fitness.values} is {subpop[-1]}")
-        except:
-            pass
 
         # Update count_no_valid_pop and Check if we havn't produced any valid population after certain generations/iterations.
         if subpop_size == 0:
@@ -933,8 +909,8 @@ def gp_main_algo_random(
                 if any(ind.fitness_achieved for ind in subpop):
                     print("Exit | We have achieved fitness targets")
                     return subpop
-            except Exception:
-                raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.")
+            except Exception as err:
+                raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.") from err
 
         # Check exit criterions.
         current_time = time.time()
@@ -953,7 +929,7 @@ def gp_main_algo_standard_gp(
     toolbox: base.Toolbox,
     optim_direction: str,
     perf_stats: PerfStats,
-    in_population: list[gp.PrimitiveTree] = [],
+    in_population: list[gp.PrimitiveTree] | None = None,
     pop_size: int = 500,
     n_children=500,
     n_gen=25,
@@ -961,12 +937,8 @@ def gp_main_algo_standard_gp(
     cx_pb=0.8,
     single_fitness_method: str = "weighted_sum",
     fitness_idx=None,
-    gp_algo_exit_params=dict(
-        no_evol_after_ngen=5, check_fitness_targets=True, after_n_hours=24, no_valid_pop_after_n_gen=3
-    ),
-    concurrent_exec_params=dict(
-        use_concurrent=True, n_processors=None, chunksize=None, timeout=None, allocate_memory_mb=None
-    ),
+    gp_algo_exit_params: dict | None = None,
+    concurrent_exec_params: dict | None = None,
 ) -> list[gp.PrimitiveTree] | list[None]:
     import concurrent.futures
     import math
@@ -974,6 +946,24 @@ def gp_main_algo_standard_gp(
     import textwrap
 
     from deap import tools
+
+    if in_population is None:
+        in_population = []
+    if gp_algo_exit_params is None:
+        gp_algo_exit_params = {
+            "no_evol_after_ngen": 5,
+            "check_fitness_targets": True,
+            "after_n_hours": 24,
+            "no_valid_pop_after_n_gen": 3,
+        }
+    if concurrent_exec_params is None:
+        concurrent_exec_params = {
+            "use_concurrent": True,
+            "n_processors": None,
+            "chunksize": None,
+            "timeout": None,
+            "allocate_memory_mb": None,
+        }
 
     if concurrent_exec_params["n_processors"] is None:  # Check Number of Logical Processors
         concurrent_exec_params["n_processors"] = multiprocessing.cpu_count()
@@ -999,9 +989,9 @@ def gp_main_algo_standard_gp(
     else:  # Using Multi-Objective/Fitness Functions
         is_single_fitness = False  # Set is_single_fitness. To be used later.
         # Check if objective are maximization or minimization based on weights.
-        if all([(w > 0) for w in perf_stats.weights]):
+        if all(w > 0 for w in perf_stats.weights):
             optim_direction = "max"
-        if all([(w < 0) for w in perf_stats.weights]):
+        if all(w < 0 for w in perf_stats.weights):
             optim_direction = "min"
         else:  # Mix Direction. Which would also depend on the input of the user.
             if optim_direction is None or optim_direction not in ["max", "min"]:  # Check if optim_direction is given.
@@ -1020,7 +1010,7 @@ def gp_main_algo_standard_gp(
     mstats = tools.MultiStatistics(
         **temp_dict
     )  # Plug the keyword argument for each Statistics Object to MultiStatistics instantiation.
-    for k in range(len(perf_stats.fitness_names)):
+    for _k in range(len(perf_stats.fitness_names)):
         raw_code = r"""
             mstats.register("avg", np.nanmean, axis=0)  # Only calculate the non np.nan values. If all are np.nan, return np.nan
             mstats.register("median", np.nanmedian, axis=0)
@@ -1076,24 +1066,23 @@ def gp_main_algo_standard_gp(
                     count_no_valid_pop += 1
         in_optim_inds = []  # Set in_optim_inds to be an empty list
     else:  # Run this code if we have given a List of gp.PrimitiveTree (subclass of creator.Individual)
-        assert type(in_population) == list and all(
-            [issubclass(type(ind), gp.PrimitiveTree) for ind in in_population]
+        assert isinstance(in_population, list) and all(
+            issubclass(type(ind), gp.PrimitiveTree) for ind in in_population
         ), "The input population is invalid"
         # Check is if each individual in the input population all have fitness.values property.
-        assert all([is_fitness_tuple_valid(ind.fitness.values) for ind in in_population]), (
+        assert all(is_fitness_tuple_valid(ind.fitness.values) for ind in in_population), (
             "The input population must have been evaluated and have valid fitness values"
         )
         population = copy.deepcopy(in_population)
         # The algorithm from previous iteration (for multi-island) might have exited because some of the individual achieved fitness targets. Collect all optimal individuals and
         # store them in a variable. Append them in populations before returning.
         try:
-            in_optim_inds = [copy.deepcopy(ind) for ind in population if ind.fitness_achieved == True]
+            in_optim_inds = [copy.deepcopy(ind) for ind in population if ind.fitness_achieved]
             for ind in in_optim_inds:
                 population.remove(ind)  # Remove the optimal individuals from population
-        except:  # There may be an error when fitness targets is not set in PerfStats object.
+        except Exception:  # There may be an error when fitness targets is not set in PerfStats object.
             print("We did not set fitness targets.")
             in_optim_inds = []
-    in_optim_inds = in_optim_inds
 
     # Check if any of the evaluated individuals, if any, have satisfied all fitness targets criterion for exit.
     if gp_algo_exit_params["check_fitness_targets"]:
@@ -1101,8 +1090,8 @@ def gp_main_algo_standard_gp(
             if any(ind.fitness_achieved for ind in population):
                 print("Exit | We have achieved fitness targets")
                 return in_optim_inds + population
-        except Exception:  # Sometimes the ind.fitness_achieved is not set (i.e. ind.fitness_achieved=None)
-            raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.")
+        except Exception as err:  # Sometimes the ind.fitness_achieved is not set (i.e. ind.fitness_achieved=None)
+            raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.") from err
 
     # Record and Log Initial Population Statistics.
     record = mstats.compile(population) if mstats is not None else {}
@@ -1187,8 +1176,8 @@ def gp_main_algo_standard_gp(
                 if any(ind.fitness_achieved for ind in population):
                     print("Exit | We have achieved fitness targets")
                     break
-            except Exception:
-                raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.")
+            except Exception as err:
+                raise Exception("We might have forgotten to set the fitness_targets in PerfStats Object.") from err
 
         # Check exit criterions.
         current_time = time.time()
@@ -1221,8 +1210,8 @@ def ring_migration(populations: list[list[gp.PrimitiveTree]], n_migrants: int):
 
     There is a possibility where some or all the demes are empty lists.
     """
-    assert all([type(deme) == list for deme in populations]), "The Populations must be a List of Lists"
-    assert n_migrants > 0 and isinstance(n_migrants, int), "The Number of Migrants must be a positive integer"
+    assert all(isinstance(deme, list) for deme in populations), "The Populations must be a List of Lists"
+    assert isinstance(n_migrants, int) and n_migrants > 0, "The Number of Migrants must be a positive integer"
 
     n_demes = len(populations)
     temp_copy_pops = copy.deepcopy(
@@ -1230,14 +1219,16 @@ def ring_migration(populations: list[list[gp.PrimitiveTree]], n_migrants: int):
     )  # Need the deep copy because some migrant might be accidentally inserted to other demes unintentionally.
 
     for i, j in zip(
-        list(range(n_demes)), _right_shift_list(list(range(n_demes)), 1)
+        range(n_demes), _right_shift_list(list(range(n_demes)), 1), strict=False
     ):  # Get 2-tuple of indexes of demes; from deme i to deme j
         # Get the top <n_migrants> from demes[i]
         # Insert top <n_migrants> from demes[i] to demes[j]
         populations[j] = temp_copy_pops[i][-n_migrants:] + populations[j]
 
 
-def _main_algo(in_pop: list, standard_gp_args=tuple(), ngen: int = 1, standard_gp_kwargs=dict()):
+def _main_algo(in_pop: list, standard_gp_args: tuple = (), ngen: int = 1, standard_gp_kwargs: dict | None = None):
+    if standard_gp_kwargs is None:
+        standard_gp_kwargs = {}
     args = copy.deepcopy(standard_gp_args)
     kwargs = copy.deepcopy(standard_gp_kwargs)
     kwargs["in_population"] = in_pop  # Modify the in_population
@@ -1265,17 +1256,14 @@ def gp_main_algo_multi_islands(
 
     # We will need this object for creating and shutting down toolbox.map. We use a deepcopy because when we apply map, we dont want it to be used inside the standard gp algo.
     tbx = copy.deepcopy(standard_gp_args[0])
-    pf = copy.deepcopy(standard_gp_args[2])
 
     standard_gp_kwargs["concurrent_exec_params"]["use_concurrent"] = (
         False  # Make sure to switch off the concurrent when referencing the standard gp algorithm.
     )
 
     n_gen = standard_gp_kwargs["n_gen"]  # Get the n_gen from standard_gp_kwargs
-    n_children = standard_gp_kwargs["n_children"]
-    deme_pop_size = standard_gp_kwargs["pop_size"]
 
-    if standard_gp_kwargs["concurrent_exec_params"]["n_processors"] != None:
+    if standard_gp_kwargs["concurrent_exec_params"]["n_processors"] is not None:
         max_workers = standard_gp_kwargs["concurrent_exec_params"]["n_processors"]
         assert max_workers <= multiprocessing.cpu_count(), (
             "The Max Worker parameter must be less than or equal to the number of cpu logical processors"

@@ -77,10 +77,10 @@ class PTTranslator(gp.PrimitiveTree):
         # self.composite_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([type(arg) == SeriesBool for arg in self[idx].args])]  # Defined by Types of Args
         # self.simple_signal_primitive_ls = [idx for idx in self.signal_primitive_ls if all([type(arg) != SeriesBool for arg in self[idx].args])] # Defined by Types of Args
         self.composite_signal_primitive_ls = [
-            idx for idx in self.signal_primitive_ls if all([arg_type == SeriesBool for arg_type in self[idx].args])
+            idx for idx in self.signal_primitive_ls if all(arg_type == SeriesBool for arg_type in self[idx].args)
         ]  # Defined by Types of Args
         self.simple_signal_primitive_ls = [
-            idx for idx in self.signal_primitive_ls if all([arg_type != SeriesBool for arg_type in self[idx].args])
+            idx for idx in self.signal_primitive_ls if all(arg_type != SeriesBool for arg_type in self[idx].args)
         ]  # Defined by Types of Args
 
         self.composite_indicator_primitive_ls = [
@@ -145,7 +145,6 @@ class PTTranslator(gp.PrimitiveTree):
         if isinstance(self[in_idx], gp.Terminal):  # If the node of in_idx is a Terminal, return None
             return []
 
-        subtree = gp.PrimitiveTree(self[self.searchSubtree(in_idx)])
         # subtree_len = len(subtree)
 
         sub_sub_trees = self.get_idx_subtrees(in_idx)
@@ -179,13 +178,9 @@ class PTTranslator(gp.PrimitiveTree):
         """
         if isinstance(self[in_idx], gp.Terminal):  # If the node of in_idx is a Terminal, return None
             return []
-        tree = copy.deepcopy(self)
-        subtree = gp.PrimitiveTree(self[self.searchSubtree(in_idx)])
-        subtree_len = len(subtree)
-
         slice_start = self.searchSubtree(in_idx).start  # Root
         slice_stop = self.searchSubtree(in_idx).stop  # Last Element
-        child_grandchild_idxs = [i for i in range(slice_start + 1, slice_stop)]  # Excluding the Start of the Slice.
+        child_grandchild_idxs = list(range(slice_start + 1, slice_stop))  # Excluding the Start of the Slice.
         # child_grandchild_idxs = [self.index(subtree[i]) for i in range(1, subtree_len)]
         # child_grandchild_idxs = []
         # for i in range(1, subtree_len):
@@ -255,10 +250,7 @@ class PTTranslator(gp.PrimitiveTree):
         if len_a > len_b:
             return False
         # Check if sublist_a is a sublist of sublist_b by comparing elements
-        for i in range(len_b - len_a + 1):
-            if sublist_b[i : i + len_a] == sublist_a:
-                return True
-        return False
+        return any(sublist_b[i : i + len_a] == sublist_a for i in range(len_b - len_a + 1))
 
 
 class CTraderTranslator:
@@ -300,7 +292,7 @@ class CTraderTranslator:
         "enable_tsl",
     ]
 
-    _strat_config: dict = dict()  # Strategy Configuration/Settings/Parameters of EvoStrategy(SignalStrategy) class. Needs to be modified in-memory before creating any instances.
+    _strat_config: dict = {}  # Strategy Configuration/Settings/Parameters of EvoStrategy(SignalStrategy) class. Needs to be modified in-memory before creating any instances.
 
     _trade_platform = "ctrader"
     _ct_version = "4.6.7"
@@ -407,7 +399,7 @@ class CTraderTranslator:
         assert len(strat_params.keys()) == len(cls._EVO_STRAT_PARAMS), (
             "The given strategy parameter dictionary does not match the size of _EVO_STRAT_PARAMS"
         )
-        assert all([(k in cls._EVO_STRAT_PARAMS) for k in strat_params]), (
+        assert all(k in cls._EVO_STRAT_PARAMS for k in strat_params), (
             "There is some element in the Strategy Params that does not match the keys in _EVO_STRAT_PARAMS"
         )
 
@@ -531,11 +523,11 @@ class CTraderTranslator:
             for idx in self.ptt.simple_indicator_primitive_ls:
                 args_idxs = self.ptt.get_idx_args(idx)  # List[int] and cannot be empty. Assumed to be Terminals
                 assert len(args_idxs) > 0, "List of Arguments for Primitives cannot be Empty!"
-                assert all([isinstance(self.ptt[i], gp.Terminal) for i in args_idxs]), (
+                assert all(isinstance(self.ptt[i], gp.Terminal) for i in args_idxs), (
                     "Arguments for a Simple Indicator must be Terminals!"
                 )
                 prim_name = self.ptt[idx].name  # Get the Deap name of the primitive
-                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
+                temp_arg_map = tuple(self._idx_ctrader[i] for i in args_idxs)
                 self._idx_simple_indicators[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
                 self._idx_ctrader[idx] = self._idx_simple_indicators[idx]  # All Indexes to CTRADER
 
@@ -558,10 +550,10 @@ class CTraderTranslator:
             )  # Sort a List of List of composite indicators (indexes) from Shortest to Longest Length
             temp_dict = {ls[0]: ls[1:] for ls in temp_ls}
             for idx, child_grandchild in temp_dict.items():
-                assert idx not in self._idx_composite_indicators.keys(), (
+                assert idx not in self._idx_composite_indicators, (
                     "This cant happen as we are starting the loop from least length composite indicator"
                 )
-                assert all([i in self._idx_ctrader.keys() for i in child_grandchild]), (
+                assert all(i in self._idx_ctrader for i in child_grandchild), (
                     f"Some child or grandchild of Composite Indicator {idx} is not processed"
                 )
                 # continue # This cant happen as we are starting from the Composite Indicator with least length
@@ -572,7 +564,7 @@ class CTraderTranslator:
                 # Note: Children of Composite Indicators can be Primitive and Terminal. We already processed the terminal. So check if the Primitive Children is processed.
                 # Otherwise skip. Remember that Primitive Children can be Simple or Composite Indicator, but Simple Indicators is already Processed.
                 # Need to reference _idx_ctrader because every non-composite indicators and primitives have been processed
-                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
+                temp_arg_map = tuple(self._idx_ctrader[i] for i in args_idxs)
                 self._idx_composite_indicators[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
                 self._idx_ctrader[idx] = self._idx_composite_indicators[idx]  # All Indexes to CTRADER
 
@@ -588,17 +580,17 @@ class CTraderTranslator:
         # Remark: Sometimes if Composite Indicators is empty, there for it may throw an error in the following code block for Simple Signals.
         if len(self.ptt.simple_signal_primitive_ls) != 0:
             for idx in self.ptt.simple_signal_primitive_ls:
-                assert idx not in self._idx_ctrader.keys(), (
+                assert idx not in self._idx_ctrader, (
                     f"It seems that Simple Signal idx={idx} has been processed and included in _idx_ctrader"
                 )
-                assert idx not in self._idx_simple_signals.keys(), (
+                assert idx not in self._idx_simple_signals, (
                     f"It seems that Simple Signal idx={idx} has been processed and included in _idx_simple_signals"
                 )
                 args_idxs = self.ptt.get_idx_args(idx)  # List of Children (Argument)
                 # parent_idx = self.ptt.get_idx_parent(idx)  # Index of the Parent
                 prim_name = self.ptt[idx].name  # Get the Primitive Name
 
-                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))
+                temp_arg_map = tuple(self._idx_ctrader[i] for i in args_idxs)
                 self._idx_simple_signals[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
                 self._idx_ctrader[idx] = self._idx_simple_signals[idx]  # All Indexes to CTRADER
 
@@ -612,7 +604,7 @@ class CTraderTranslator:
         if len(self.ptt.composite_signal_primitive_ls) != 0:
             # print("Processing Composite Signals")
             # print("Composite Signal Indexes:", self.ptt.composite_signal_primitive_ls)
-            assert all([i not in self._idx_ctrader.keys() for i in self.ptt.composite_signal_primitive_ls]), (
+            assert all(i not in self._idx_ctrader for i in self.ptt.composite_signal_primitive_ls), (
                 "One of the Composite Signal Index has been processed before starting!"
             )
             # Warn: Some Composite Signal may depend on other composite signal that has not been proccessed yet!
@@ -620,20 +612,20 @@ class CTraderTranslator:
             for idx in reversed(self.ptt.composite_signal_primitive_ls):
                 # print(f"processing composite signal idx={idx} ...")
                 # print(str(self.ptt[self.ptt.searchSubtree(idx)]))
-                assert idx not in self._idx_ctrader.keys() and idx not in self._idx_composite_signals.keys(), (
+                assert idx not in self._idx_ctrader and idx not in self._idx_composite_signals, (
                     f"It seems that Composite Signal idx={idx} has been processed."
                 )
                 args_idxs = self.ptt.get_idx_args(idx)  # List of Children (Argument)
-                assert all([(i in self.ptt.signal_primitive_ls) for i in args_idxs]), (
+                assert all(i in self.ptt.signal_primitive_ls for i in args_idxs), (
                     "One of the Argument Index is Not a Signal! Fix this!"
                 )
-                assert all([i in self._idx_ctrader.keys() for i in args_idxs]), (
+                assert all(i in self._idx_ctrader for i in args_idxs), (
                     "One of the Argument Index is not processed and inserted in _idx_ctrader keys!"
                 )
                 # print("Arg Indexes:", args_idxs)
                 prim_name = self.ptt[idx].name  # Get the Primitive Name
                 # print("Primitive Name:", prim_name)
-                temp_arg_map = tuple(map(lambda i: self._idx_ctrader[i], args_idxs))  # Get the processed arguments
+                temp_arg_map = tuple(self._idx_ctrader[i] for i in args_idxs)  # Get the processed arguments
                 self._idx_composite_signals[idx] = self.primitive_to_ctrader[prim_name](*temp_arg_map)
                 self._idx_ctrader[idx] = self._idx_composite_signals[idx]  # All Indexes to CTRADER
 
@@ -681,7 +673,7 @@ class CTraderTranslator:
         temp_mapper_simple_indicator = OrderedDict()  # Dict(Str -> Dict(Str->Str)) This is to map the original ctrader code expression to the key-value pair of simple_indicator_temp_dict
         # Process Simple Indicators
         if len(self.ptt.simple_indicator_primitive_ls) != 0:
-            for idx, ct_code_expr in self._idx_simple_indicators.items():
+            for _idx, ct_code_expr in self._idx_simple_indicators.items():
                 simple_indicator_temp_dict[rf"indicator{i_d}"] = ct_code_expr  # Variable String to CTRADER expression
                 temp_mapper_simple_indicator[ct_code_expr] = {
                     rf"indicator{i_d}": ct_code_expr
@@ -798,7 +790,7 @@ class CTraderTranslator:
         composite_signal_str_ls = []
         temp_mapper_composite_signal = OrderedDict()
         if len(self.ptt.composite_signal_primitive_ls) != 0:
-            for idx, ct_code_expr in self._idx_composite_signals.items():
+            for _idx, ct_code_expr in self._idx_composite_signals.items():
                 ct_code_expr_ = copy.deepcopy(ct_code_expr)
                 # Check if the processed Composite Signal is present in the current
                 for original_expr, composite_signal_dict in reversed(temp_mapper_composite_signal.items()):
@@ -925,7 +917,7 @@ namespace cAlgo.Robots
     {
         [Parameter(DefaultValue = $strategy_name)]
         public string BotName { get; set; }
-        
+
         // Strategy Settings
         public TradeDirection Direction; // LongOnly, ShortOnly, LongShort
         public bool ExitEncodedEntry;
@@ -938,14 +930,14 @@ namespace cAlgo.Robots
         public double? TPPips;
         public bool EnableTSL;
         public double TradeSize; // Could be a an Int (Units) or Double (Fraction of Liquidity) but must be converted to double volume
-        
+
         // Private Properties
         private int _barCount; // Used for ExitAfterNBars
         private bool _startCounting; // Used for ExitAfterNBars
-        
+
         private bool _useFixedFractional; // Fixed Fractional
         private double _tradeSize; // Fixed Fractional
-        
+
         // DataSeries
         private DataSeries Open;
         private DataSeries High;
@@ -953,9 +945,9 @@ namespace cAlgo.Robots
         private DataSeries Close;
         private DataSeries Volume;
         private TimeSeries Date;
-        
+
         protected override void OnStart()
-        {   
+        {
             // Initialize DataSeries
             Open = Bars.OpenPrices;
             High = Bars.HighPrices;
@@ -963,7 +955,7 @@ namespace cAlgo.Robots
             Close = Bars.ClosePrices;
             Volume = Bars.TickVolumes;
             Date = Bars.OpenTimes;
-            
+
             // To Be Generated in Evoquant. These are just some examples.
             // Instantiate Strategy Settings.
             BotName = BotName;
@@ -978,11 +970,11 @@ namespace cAlgo.Robots
             //TPPips = <>; //TODO: SLPipqs & TPPips has to be a valid double and Pip units. Percentage and Points must be converted.
             EnableTSL = $enable_tsl; //TODO: Implement the TSL in Backtesting.py
             TradeSize = $trade_size; //TODO: TradeSize need to be given as Valid Double and converted to volume/units (not lots).
-            
+
             //Debug.Assert(ExitAfterNBars is int? && ExitAfterNBars >= 1, "ExitAfterNBars must be a positive integer");
-            
+
             // Fix TradeSize by Volume/Units for Validity from Template
-            if(TradeSize < Symbol.VolumeInUnitsMin && TradeSize >= 1) 
+            if(TradeSize < Symbol.VolumeInUnitsMin && TradeSize >= 1)
             {
                 TradeSize = Symbol.VolumeInUnitsMin;
                 _tradeSize = Symbol.NormalizeVolumeInUnits(_tradeSize, RoundingMode.Down);
@@ -991,32 +983,32 @@ namespace cAlgo.Robots
             {
                 _tradeSize = Symbol.NormalizeVolumeInUnits(_tradeSize, RoundingMode.Down);
             }
-            
+
             if (TradeSize > 0 && TradeSize < 1)
             {
                 _useFixedFractional = true;
             }
-            else 
+            else
             {
                 _useFixedFractional = false;
             }
-            
+
             Bars.BarOpened +=OnOpen;
             Positions.Opened += OnPositionsOpened;
         }
-        
+
         // Open Bar Event-handler
-        private void OnOpen(BarOpenedEventArgs obj) 
-        {   
+        private void OnOpen(BarOpenedEventArgs obj)
+        {
             // Check and Update Bar Counting
-            if (_startCounting) // True when there is open position. 
-                _barCount++; // Update Number of Bar Count. 
-            
+            if (_startCounting) // True when there is open position.
+                _barCount++; // Update Number of Bar Count.
+
             // Run Exits
             RunExitAfterNBars();
             RunExitAfterNDays(obj);
             RunExitWhenPnLLessThan();
-            
+
             // Check and Update Fixed Fractional Size
             if (_useFixedFractional)
             {
@@ -1027,35 +1019,35 @@ namespace cAlgo.Robots
                 _tradeSize = Math.Floor(_tradeSize/currentSymbolPrice); // Trade Size in Volume
                 _tradeSize = Symbol.NormalizeVolumeInUnits(_tradeSize, RoundingMode.Down); // Normalize to tradable amount in volume
             }
-            
+
             // Check and Update Fixed Stop-Loss (Percentage, Pips, Points)
             SLPips = $stop_loss;
 			TPPips = $take_profit;
-            
+
             // Run Entries
             RunEntries();
         }
-        
+
         protected override void OnTick()
         {
             // Handle price updates here
         }
-        
+
         protected override void OnStop()
         {
             // Handle cBot stop here
         }
         //====================================Testing====================================
-        
+
         //===============================================================================
         private void RunEntries()
-        {   
+        {
             // Run Entry Code Block
             $indicator_signal_code
-            
+
             var positions = Positions.FindAll(BotName, Symbol.Name); // Get all open positions
             var countPositions = Positions.Count; // Count how many open positions
-            
+
             // Entry
             switch (Direction)
             {
@@ -1074,7 +1066,7 @@ namespace cAlgo.Robots
                         break;
                     }
                 }
-                
+
                 Debug.Assert(countPositions == 0, "There is at least 1 position and didn't exit the method");
                 if (root_signal) // True for Long Signal
                 {
@@ -1097,13 +1089,13 @@ namespace cAlgo.Robots
                         break;
                     }
                 }
-                
+
                 Debug.Assert(countPositions == 0, "There is at least 1 position and didn't exit the method");
                 if (root_signal) // True for Short Signal
                 {
                     ExecuteMarketOrder(TradeType.Sell, Symbol.Name, _tradeSize, BotName, SLPips, TPPips, "", EnableTSL);
                 }
-                
+
                 break;
                 //----------
                 case TradeDirection.LongShort:
@@ -1150,7 +1142,7 @@ namespace cAlgo.Robots
                         }
                     }
                 }
-                
+
                 Debug.Assert(countPositions == 0, "There is at least 1 position and didn't exit the method");
                 // If there are no open position, see which signal is triggered. True for Long and False for Short.
                 // We always check the signal.
@@ -1169,36 +1161,36 @@ namespace cAlgo.Robots
         {
             if(ExitAfterNBars == null) {return;} // Return the method if ExitAfterNBars is disabled
             // We Assert that ExitAfterNBars is a valid positive integer
-            
+
             var positions = Positions.FindAll(BotName, Symbol.Name); // Get all open positions
             var countPositions = Positions.Count; // Count how many open positions
-            
+
             if (countPositions == 0) {return;} // No Position. There is nothing to exit.
-            
+
             Debug.Assert(countPositions == 1, "There should be only 1 position at a time");
-            
+
             Position position = positions[0];
-            
+
             if (_barCount >= ExitAfterNBars)
             {
                 position.Close();
             }
         }
-        
+
         private void RunExitAfterNDays(BarOpenedEventArgs obj)
         {
             if(ExitAfterNDays == null) {return;} // Return the method if ExitAfterNDays is disabled
             // We Assert that ExitAfterNDays is a valid positive integer
-            
+
             var positions = Positions.FindAll(BotName, Symbol.Name); // Get all open positions
             var countPositions = Positions.Count; // Count how many open positions
-            
+
             if (countPositions == 0) {return;} // No Position. There is nothing to exit.
-            
+
             Debug.Assert(countPositions == 1, "There should be only 1 position at a time");
-            
+
             Position position = positions[0];
-            
+
             var NowDatetime = obj.Bars.OpenTimes.LastValue;
             var DateDiff = NowDatetime.Subtract(position.EntryTime).Days;
             if (DateDiff >= ExitAfterNDays)
@@ -1206,23 +1198,23 @@ namespace cAlgo.Robots
                 position.Close();
             }
         }
-        
+
         private void RunExitWhenPnLLessThan()
         {
             /*Ideally, this should be in OnTick Event-Handler*/
             var positions = Positions.FindAll(BotName, Symbol.Name); // Get all open positions
             var countPositions = Positions.Count; // Count how many open positions
-            
+
             if (ExitWhenPnLLessThan == null) {return;} //Return method if ExitWhenPnLLessThan is disabled
             if (countPositions == 0) {return;} //Return method when there are no open positions to close
-            
+
             Debug.Assert(countPositions == 1, "There should be only 1 position at a time");
             Position position = positions[0];
-            
+
             // Close the position if the net profit is less than a given fixed dollar amount threshold (must be negative).
             if (position.NetProfit <= ExitWhenPnLLessThan) {position.Close();}
         }
-        
+
         private void RunExitEndOfWeek()
         {
             // To be implemented in the future
@@ -1238,13 +1230,13 @@ namespace cAlgo.Robots
             _barCount = 0; // Set intially to 0.
             // Remind that when a position is opened, its on the Open Price of the Bar.
         }
-        
+
         void OnPositionsClosed(PositionClosedEventArgs obj)
         {
             // Reset Number of Bars Counting.
             _startCounting = false;
         }
-        
+
         //====================================Signal Methods====================================
         private bool SeriesCrossAboveSeries(DataSeries Series1, DataSeries Series2)
         {
@@ -1256,7 +1248,7 @@ namespace cAlgo.Robots
             bool result = Series1.Last(1+0) < Series2.Last(1+0) & Series1.Last(1+1) > Series2.Last(1+1);
             return result;
         }
-        
+
         private bool SeriesIsAboveSeries(DataSeries Series1, DataSeries Series2)
         {
             bool result = Series1.Last(1+0) > Series2.Last(1+0);
@@ -1267,9 +1259,9 @@ namespace cAlgo.Robots
             bool result = Series1.Last(1+0) < Series2.Last(1+0);
             return result;
         }
-        
+
         private bool IsIncr(DataSeries Series, int Period)
-        {   
+        {
             List<Boolean> bools = new List<Boolean>();
             for (int i = 0; i < Period; i++)
             {
@@ -1280,7 +1272,7 @@ namespace cAlgo.Robots
             else {return false;}
         }
         private bool IsDecr(DataSeries Series, int Period)
-        {   
+        {
             List<Boolean> bools = new List<Boolean>();
             for (int i = 0; i < Period; i++)
             {
@@ -1290,12 +1282,12 @@ namespace cAlgo.Robots
             if(AllTrue) {return true;}
             else {return false;}
         }
-        
+
         private bool IsHighest(DataSeries Series, int Period)
         {
             var CurrentValue = Series.Last(1+0); // Assume that Current is the Max
             for (int i = 1; i < Period; i++)
-            {   
+            {
                 var PrevVal = Series.Last(1+i);
                 if(PrevVal > CurrentValue) // We found a past value higher than the current
                 {
@@ -1308,7 +1300,7 @@ namespace cAlgo.Robots
         {
             var CurrentValue = Series.Last(1+0); // Assume that Current is the Min
             for (int i = 1; i < Period; i++)
-            {   
+            {
                 var PrevVal = Series.Last(1+i);
                 if(PrevVal < CurrentValue) // We found a past value higher than the current
                 {

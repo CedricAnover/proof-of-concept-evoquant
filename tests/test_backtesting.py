@@ -1,19 +1,16 @@
-import pytest
 import numpy as np
+import pytest
 
-from evoquant.backtest_engine.utils import *
 from evoquant.base import SeriesBool
 
 # Only import evo_vbt_backtester if vectorbt is available
 try:
-    from evoquant.backtest_engine.evo_bt import evo_vbt_backtester
+    from evoquant.backtest_engine.evo_bt import evo_vbt_backtester as evo_vbt_backtester
 
     VBT_AVAILABLE = True
 except ImportError:
     VBT_AVAILABLE = False
 import pandas as pd
-
-from evoquant.backtest_engine.validation import *
 
 # Optional vectorbt import for tests
 try:

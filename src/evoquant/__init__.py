@@ -163,7 +163,7 @@ __all__ = [
 
 # Add legacy backtesting support if available
 try:
-    from evoquant.backtest_engine import EvoStrategy  # type: ignore
+    from evoquant.backtest_engine import EvoStrategy as EvoStrategy  # type: ignore
 
     __all__.append("EvoStrategy")
 except ImportError:

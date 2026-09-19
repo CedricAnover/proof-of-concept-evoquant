@@ -91,7 +91,7 @@ class Evolver:
         Processed data from df_dohlcv.
     main_input : Tuple[SeriesBase]
     terminal_types : List[Any|SeriesBase|ParameterBase]
-        Will be modified as we add main_input, and other Terminals and Ephemirals. 
+        Will be modified as we add main_input, and other Terminals and Ephemirals.
     pset : gp.PrimitiveSetTyped
     pset_mapping : Dict[Str->Class|Function|Variable]
     perf_stats : PerStats
@@ -135,7 +135,7 @@ class Evolver:
 
     evolver.raw_str : Str = r"""
         """
-        Contains the generated code. Initially, this is an empty raw string. When this is invoked using @property, it will process all the 
+        Contains the generated code. Initially, this is an empty raw string. When this is invoked using @property, it will process all the
         generated 'code components' and 'sum' it up into one executable valid python deap code.
     evolver.exec_raw_str()
         This method should execute the generated raw string using exec() function.
